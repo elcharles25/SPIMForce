@@ -745,14 +745,13 @@ const Dashboard = () => {
                 <>
                   <div className="grid grid-cols-3 gap-4">
                     <div 
-                      className="text-center p-4 bg-gradient-to-br from-indigo-50 to-white rounded-lg border border-indigo-100 cursor-pointer hover:shadow-md transition-shadow"
+                      className="text-center p-6 bg-gradient-to-br from-indigo-50 to-white rounded-lg border border-indigo-100 cursor-pointer hover:shadow-md transition-shadow"
                       onClick={() => setShowReplyRateDialog(true)}
                     >
                       <div className="text-2xl font-bold">
                         {formatPercentage(metrics.campaigns.replyRate)}
                       </div>
                       <div className="text-xs text-muted-foreground mt-1">Tasa de respuesta</div>
-                      <div className="text-xs text-slate-400 font-medium text-right w-full">Detalle →</div>
                     </div>
                     <div className="text-center p-6 bg-gradient-to-br from-indigo-50 to-white rounded-lg border border-indigo-100">
                       <div className="text-2xl font-bold">
