@@ -1,0 +1,18 @@
+{
+  "name": "charlsforce-installer",
+  "version": "1.0.0",
+  "description": "Instalador de Charlsforce CRM",
+  "main": "install.js",
+  "scripts": {
+    "install-app": "node install.js"
+  },
+  "keywords": ["crm", "installer", "charlsforce"],
+  "author": "Carlos",
+  "license": "MIT",
+  "dependencies": {
+    "better-sqlite3": "^11.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

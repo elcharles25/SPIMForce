@@ -1,0 +1,1681 @@
+import { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { db } from '@/lib/db-adapter';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { formatDateTime } from "@/utils/dateFormatter";
+import "@/app.css";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Switch } from '@/components/ui/switch';
+import { ArrowLeft, Plus, Pencil, Trash2, Mail, Phone, Linkedin, Sparkles, TrendingUp, ClipboardList, MessageSquare, Copy, Loader2 } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+
+interface Opportunity {
+  id: string;
+  contact_id: string;
+  status: string;
+  proposed_solution: string;
+  offer_presented: boolean;
+  created_at: string;
+  updated_at: string;
+  contact: {
+    first_name: string;
+    last_name: string;
+    organization: string;
+    title: string;
+    email: string;
+    phone: string | null;
+    linkedin_url: string | null;
+    tier: string | null;
+    notes: string | null;
+    pa_name: string | null;
+    pa_email: string | null;
+    pa_phone: string | null;
+  };
+}
+
+interface Meeting {
+  id: string;
+  opportunity_id: string;
+  contact_id: string;
+  meeting_type: string;
+  meeting_date: string;
+  notes: string;
+  feeling: string;
+  created_at: string;
+  contact?: {
+    first_name: string;
+    last_name: string;
+    organization: string;
+  };
+}
+
+interface MeetingForm {
+  contact_id: string;
+  meeting_type: string;
+  meeting_date: string;
+  notes: string;
+  feeling: string;
+}
+
+interface OpportunityForm {
+  organization: string;
+  contact_id: string;
+  status: string;
+  solution_type: string;
+  solution_mode: string;
+  offer_presented: boolean;
+}
+
+const MEETING_TYPES = [
+  { value: 'Qualification', label: 'Qualification' },
+  { value: 'Cap. Alignment', label: 'Cap. Alignment' },
+  { value: 'IPW', label: 'IPW' },
+  { value: 'POC', label: 'POC' },
+  { value: 'EP POC', label: 'EP POC' },
+  { value: 'Proposal', label: 'Proposal' },
+  { value: 'Telefono', label: 'Teléfono' },
+];
+
+const FEELING_OPTIONS = [
+  { value: 'Excelente', label: 'Excelente', color: 'bg-green-500' },
+  { value: 'Bien', label: 'Bien', color: 'bg-blue-500' },
+  { value: 'Neutral', label: 'Neutral', color: 'bg-yellow-500' },
+  { value: 'Mal', label: 'Mal', color: 'bg-orange-500' },
+  { value: 'Muy mal', label: 'Muy mal', color: 'bg-red-500' },
+];
+
+const STATUS_COLORS: Record<string, string> = {
+  'Abierta': 'bg-gray-100 border-gray-500 text-gray-700',
+  'Qualification': 'bg-indigo-100 border-indigo-500 text-indigo-700',
+  'Capabilities': 'bg-indigo-100 border-indigo-500 text-indigo-700',
+  'Propuesta': 'bg-green-100 border-green-500 text-green-700',
+  'Cerrada ganada': 'bg-green-500',
+  'Cerrada perdida': 'bg-black',
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  'Abierta': 'Abierta',
+  'Qualification': 'Qualification',
+  'Capabilities': 'Capabilities',
+  'Propuesta': 'Propuesta',
+  'Cerrada ganada': 'Cerrada ganada',
+  'Cerrada perdida': 'Cerrada perdida',
+};
+
+const STATUSES = [
+  { value: 'Abierta', label: 'Abierta' },
+  { value: 'Qualification', label: 'Qualification' },
+  { value: 'Capabilities', label: 'Capabilities' },
+  { value: 'Propuesta', label: 'Propuesta' },
+  { value: 'Cerrada ganada', label: 'Cerrada ganada' },
+  { value: 'Cerrada perdida', label: 'Cerrada perdida' },
+];
+
+const SOLUTION_TYPES = [
+  'ExPv2',
+  'G4CISO',
+  'G4CDAO',
+  'G4AIO',
+  'G4EAL',
+  'G4I&OL',
+  'G4SWEL',
+  'GTP',
+  'IAS',
+];
+
+const SOLUTION_MODES = ['Guided', 'Self-directed'];
+
+const generateNotesFile = (meetings: Meeting[]): string => {
+  let content = '=== HISTORIAL DE INTERACCIONES ===\n\n';
+
+  const sortedMeetings = [...meetings].sort((a, b) =>
+    new Date(b.meeting_date).getTime() - new Date(a.meeting_date).getTime()
+  );
+
+  sortedMeetings.forEach((meeting, index) => {
+    content += `\n${'='.repeat(80)}\n`;
+    content += `INTERACCIÓN ${index + 1}\n`;
+    content += `${'='.repeat(80)}\n`;
+    content += `Tipo: ${meeting.meeting_type}\n`;
+    content += `Fecha: ${formatDateTime(meeting.meeting_date)}\n`;
+    content += `Sensación: ${meeting.feeling}\n`;
+    content += `\nNotas:\n${'-'.repeat(80)}\n`;
+    content += `${meeting.notes || 'Sin notas'}\n`;
+  });
+
+  return content;
+};
+
+const analyzeWithGemini = async (notesContent: string, promptText: string): Promise<string> => {
+  const geminiKey = (window as any).__GEMINI_API_KEY__ || '';
+
+  if (!geminiKey) {
+    throw new Error('GEMINI_API_KEY no configurada. Por favor, configúrala en Settings.');
+  }
+
+  const fullPrompt = `${promptText}
+
+INFORMACIÓN DEL CLIENTE:
+${notesContent}`;
+
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 120000);
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{
+            text: fullPrompt
+          }]
+        }],
+        generationConfig: {
+          temperature: 0.7,
+          topK: 40,
+          topP: 0.95,
+          maxOutputTokens: 20000,
+        }
+      }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Error Gemini API: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+
+    if (!data.candidates || !data.candidates[0]?.content?.parts?.[0]?.text) {
+      throw new Error('Respuesta inesperada de Gemini');
+    }
+
+    return data.candidates[0].content.parts[0].text;
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error('La solicitud tardó demasiado tiempo. Intenta de nuevo.');
+    }
+    throw new Error(`Error analizando con Gemini: ${err instanceof Error ? err.message : String(err)}`);
+  }
+};
+
+export default function OpportunityDetailPage() {
+  const { toast } = useToast();
+  const navigate = useNavigate();
+  const { id } = useParams();
+
+  const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
+  const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [contacts, setContacts] = useState<any[]>([]);
+  const [filteredContacts, setFilteredContacts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [meetingDialog, setMeetingDialog] = useState(false);
+  const [opportunityDialog, setOpportunityDialog] = useState(false);
+  const [editingMeeting, setEditingMeeting] = useState<Meeting | null>(null);
+  const [deleteMeetingDialog, setDeleteMeetingDialog] = useState<string | null>(null);
+  const [deleteOpportunityDialog, setDeleteOpportunityDialog] = useState(false);
+  const [isEditingNotes, setIsEditingNotes] = useState(false);
+  const [notesContent, setNotesContent] = useState('');
+  const [geminiLoading, setGeminiLoading] = useState(false);
+  const [geminiDialog, setGeminiDialog] = useState(false);
+  const [geminiResult, setGeminiResult] = useState('');
+  const [customPromptDialog, setCustomPromptDialog] = useState(false);
+  const [customPrompt, setCustomPrompt] = useState('');
+  const [qualificationInitiatives, setQualificationInitiatives] = useState<Array<{
+    title: string;
+    challenge: string;
+    gartner_value: string;
+    cost: string;
+    date: string;
+    detail_description: string;
+    owner: string;
+  }>>([]);
+  const [qualificationLoading, setQualificationLoading] = useState(false);
+  const [lastQualificationUpdate, setLastQualificationUpdate] = useState<string | null>(null);
+  const [selectedQualificationInitiative, setSelectedQualificationInitiative] = useState<any>(null);
+  const [qualificationDetailDialog, setQualificationDetailDialog] = useState(false);
+
+  const [meetingForm, setMeetingForm] = useState<MeetingForm>({
+    contact_id: '',
+    meeting_type: '',
+    meeting_date: '',
+    feeling: 'Neutral',
+    notes: '',
+  });
+
+  const [opportunityForm, setOpportunityForm] = useState<OpportunityForm>({
+    organization: '',
+    contact_id: '',
+    status: 'Abierta',
+    solution_type: '',
+    solution_mode: '',
+    offer_presented: false,
+  });
+
+  const generateNotesFile = (meetings: Meeting[]): string => {
+    let content = '=== HISTORIAL COMPLETO DE INTERACCIONES ===\n\n';
+    content += `Total de interacciones: ${meetings.length}\n`;
+    content += `Rango de fechas: ${meetings.length > 0 ? formatDateTime(meetings[meetings.length - 1].meeting_date) : 'N/A'} - ${meetings.length > 0 ? formatDateTime(meetings[0].meeting_date) : 'N/A'}\n\n`;
+
+    const sortedMeetings = [...meetings].sort((a, b) =>
+      new Date(b.meeting_date).getTime() - new Date(a.meeting_date).getTime()
+    );
+
+    sortedMeetings.forEach((meeting, index) => {
+      content += `\n${'='.repeat(80)}\n`;
+      content += `INTERACCIÓN ${index + 1} DE ${sortedMeetings.length}\n`;
+      content += `${'='.repeat(80)}\n`;
+      content += `Tipo: ${meeting.meeting_type}\n`;
+      content += `Fecha: ${formatDateTime(meeting.meeting_date)}\n`;
+      content += `Sensación: ${meeting.feeling}\n`;
+      content += `\nContenido:\n${'-'.repeat(80)}\n`;
+      content += `${meeting.notes || 'Sin notas'}\n`;
+    });
+
+    content += `\n${'='.repeat(80)}\n`;
+    content += `FIN DEL HISTORIAL\n`;
+    content += `${'='.repeat(80)}\n`;
+
+    return content;
+  };
+
+  const analyzeWithGemini = async (notesContent: string, promptText: string): Promise<string> => {
+    const geminiKey = (window as any).__GEMINI_API_KEY__ || '';
+
+    if (!geminiKey) {
+      throw new Error('GEMINI_API_KEY no configurada. Por favor, configúrala en Settings.');
+    }
+
+    const fullPrompt = `${promptText}
+
+INFORMACIÓN DEL CLIENTE:
+${notesContent}`;
+
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`;
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 120000);
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{
+              text: fullPrompt
+            }]
+          }],
+          generationConfig: {
+            temperature: 0.7,
+            topK: 40,
+            topP: 0.95,
+            maxOutputTokens: 20000,
+          }
+        }),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Error Gemini API: ${response.status} - ${errorText}`);
+      }
+
+      const data = await response.json();
+
+      if (!data.candidates || !data.candidates[0]?.content?.parts?.[0]?.text) {
+        throw new Error('Respuesta inesperada de Gemini');
+      }
+
+      return data.candidates[0].content.parts[0].text;
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw new Error('La solicitud tardó demasiado tiempo. Intenta de nuevo.');
+      }
+      throw new Error(`Error analizando con Gemini: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
+  const PROMPT_CUALIFICACION = `En base a la información contenida en el fichero adjunto, que incluye emails y notas de reuniones realizadas durante un proceso comercial de Gartner con un prospect, realiza el siguiente análisis:
+
+    1. Identificación y priorización de iniciativas:
+      - Enumera las iniciativas del prospect, priorizándolas por orden de relevancia.
+      - Para cada iniciativa, verifica si se ha recopilado la siguiente información:
+          1. Título: claro y conciso (máx 60 caracteres)
+          2. Reto principal: Reto principal que aborda la iniciativa (máx 150 caracteres)
+          3. Valor: Valor que Gartner puede aportar con sus servicios
+          4. Coste: Coste que el prospect estima para la iniciativa 
+          5. Fecha límite: Fecha límite o deadline para la entrega de la iniciativa
+          6. Responsable: Responsable asignado de la iniciativa
+      - Para cada punto en el que falte información, indica preguntas concretas que se pueden realizar al prospect para obtener los datos necesarios, excepto para el punto de fecha límite (para este punto, si no hay fecha límite definida, indicar: Fecha límite no identificada)
+
+    2. Estructura de la respuesta:
+      Devuelve SOLO JSON (sin markdown):
+        {
+          "initiatives": [
+            {
+              "title": "Título",
+              "challenge": "Reto principal",
+              "gartner_value": "Valor",
+              "cost": "Coste",
+              "date": "Fecha límite",
+              "detail_description": "Descripción detallada",
+              "owner": "Responsable",
+            }
+          ]
+        }
+
+        Si no hay iniciativas:
+        {
+          "initiatives": []
+        }`;
+
+  useEffect(() => {
+    if (id) {
+      loadData();
+    }
+  }, [id]);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const [oppData, meetingsData, contactsData] = await Promise.all([
+        db.getOpportunity(id!),
+        db.getMeetingsByOpportunity(id!),
+        db.getContacts(),
+      ]);
+
+      if (oppData && oppData.contact_id) {
+        const fullContact = await db.getContact(oppData.contact_id);
+        // Reemplazar el contacto anidado con el contacto completo
+        oppData.contact = fullContact;
+      }
+
+      setOpportunity(oppData);
+      setMeetings(meetingsData);
+      setContacts(contactsData);
+    } catch (error) {
+      console.error('Error cargando datos:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAnalyzeQualification = async () => {
+    if (meetings.length === 0) {
+      toast({
+        title: 'Sin información',
+        description: 'No hay reuniones registradas para analizar',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setQualificationLoading(true);
+    try {
+      console.log('📊 Iniciando análisis de cualificación...');
+
+      // Generar archivo de notas usando la misma función que ContactDetailPage
+      const notesContent = generateNotesFile(meetings);
+      console.log(`📄 Archivo generado: ${notesContent.length} caracteres, ${meetings.length} interacciones`);
+
+      // Enviar a Gemini usando la misma función que ContactDetailPage
+      const result = await analyzeWithGemini(notesContent, PROMPT_CUALIFICACION);
+
+      // Parsear JSON de la respuesta
+      const jsonMatch = result.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error('No se pudo extraer JSON de la respuesta');
+      }
+
+      const parsed = JSON.parse(jsonMatch[0]);
+      const extractedInitiatives = parsed.initiatives || [];
+
+      setQualificationInitiatives(extractedInitiatives);
+      setLastQualificationUpdate(new Date().toISOString());
+
+      toast({
+        title: 'Análisis completado',
+        description: `Se encontraron ${extractedInitiatives.length} iniciativa(s) para cualificar`,
+      });
+    } catch (error) {
+      console.error('Error analizando cualificación:', error);
+
+      let errorMessage = 'Error al analizar cualificación';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+    } finally {
+      setQualificationLoading(false);
+    }
+  };
+
+  const handleCustomPrompt = async () => {
+    if (!customPrompt.trim()) {
+      toast({
+        title: 'Prompt requerido',
+        description: 'Por favor, escribe un prompt personalizado',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (meetings.length === 0) {
+      toast({
+        title: 'Sin información',
+        description: 'No hay reuniones registradas para analizar',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setGeminiLoading(true);
+    setCustomPromptDialog(false);
+
+    try {
+      console.log('📊 Iniciando análisis personalizado...');
+
+      const basePrompt = `En base a la información del fichero adjunto, que son emails y notas de reuniones de un comercial de la empresa Gartner con un cliente/prospect, ${customPrompt}`;
+
+      // Generar archivo de notas usando la misma función que ContactDetailPage
+      const notesContent = generateNotesFile(meetings);
+      console.log(`📄 Archivo generado: ${notesContent.length} caracteres, ${meetings.length} interacciones`);
+
+      // Enviar a Gemini usando la misma función que ContactDetailPage
+      const result = await analyzeWithGemini(notesContent, basePrompt);
+      setGeminiResult(result);
+      setGeminiDialog(true);
+    } catch (error) {
+      console.error('Error con Gemini:', error);
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Error al analizar con Gemini',
+        variant: 'destructive',
+      });
+    } finally {
+      setGeminiLoading(false);
+    }
+  };
+
+  const copyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(geminiResult);
+      toast({
+        title: 'Copiado',
+        description: 'Análisis copiado al portapapeles',
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'No se pudo copiar al portapapeles',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const openEditDialog = () => {
+    if (!opportunity) return;
+
+    const proposedSolution = opportunity.proposed_solution || '';
+    const parts = proposedSolution.split(' - ');
+    const solution_type = parts[0] || '';
+    const solution_mode = parts[1] || '';
+
+    setOpportunityForm({
+      organization: opportunity.contact.organization,
+      contact_id: opportunity.contact_id,
+      status: opportunity.status,
+      solution_type: solution_type,
+      solution_mode: solution_mode,
+      offer_presented: opportunity.offer_presented,
+    });
+
+    const filtered = contacts.filter(c => c.organization === opportunity.contact.organization);
+    setFilteredContacts(filtered);
+
+    setOpportunityDialog(true);
+  };
+
+  const handleOrganizationChange = (organization: string) => {
+    setOpportunityForm({ ...opportunityForm, organization, contact_id: '' });
+    const filtered = contacts.filter(c => c.organization === organization);
+    setFilteredContacts(filtered);
+  };
+
+  const handleSaveOpportunity = async () => {
+    if (!opportunityForm.contact_id) {
+      toast({
+        title: 'Campo requerido',
+        description: 'Debes seleccionar un contacto',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!opportunityForm.solution_type || !opportunityForm.solution_mode) {
+      toast({
+        title: 'Campos requeridos',
+        description: 'Debes seleccionar el tipo y modo de solución',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const proposed_solution = `${opportunityForm.solution_type} - ${opportunityForm.solution_mode}`;
+
+    const payload = {
+      contact_id: opportunityForm.contact_id,
+      status: opportunityForm.status,
+      proposed_solution: proposed_solution,
+      offer_presented: opportunityForm.offer_presented,
+    };
+
+    try {
+      await db.updateOpportunity(id!, payload);
+      toast({
+        title: 'Éxito',
+        description: 'Oportunidad actualizada correctamente',
+      });
+      setOpportunityDialog(false);
+      await loadData();
+    } catch (error) {
+      console.error('Error guardando oportunidad:', error);
+      toast({
+        title: 'Error',
+        description: 'Error al guardar la oportunidad',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleDeleteOpportunity = async () => {
+    if (!opportunity) return;
+
+    try {
+      await db.deleteOpportunity(opportunity.id);
+
+      try {
+        const contact = await db.getContact(opportunity.contact_id);
+        const updatedContact = {
+          ...contact,
+          contact_type: 'Prospect'
+        };
+        await db.updateContact(opportunity.contact_id, updatedContact);
+      } catch (contactError) {
+        console.error('Error actualizando tipo de contacto:', contactError);
+      }
+
+      toast({
+        title: 'Éxito',
+        description: 'Oportunidad eliminada y contacto actualizado a Prospect',
+      });
+
+      navigate('/opportunities');
+    } catch (error) {
+      console.error('Error eliminando oportunidad:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudo eliminar la oportunidad',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleOpenMeetingDialog = (meeting?: Meeting) => {
+    if (meeting) {
+      setEditingMeeting(meeting);
+      const dateStr = meeting.meeting_date.split(' ')[0].split('/').reverse().join('-');
+      setMeetingForm({
+        contact_id: meeting.contact_id || '',
+        meeting_type: meeting.meeting_type,
+        meeting_date: dateStr,
+        notes: meeting.notes || '',
+        feeling: meeting.feeling || 'neutral',
+      });
+    } else {
+      setEditingMeeting(null);
+      setMeetingForm({
+        contact_id: opportunity?.contact_id || '',
+        meeting_type: '',
+        meeting_date: '',
+        notes: '',
+        feeling: 'Neutral',
+      });
+    }
+    setMeetingDialog(true);
+  };
+
+  const handleSaveMeeting = async () => {
+    if (!meetingForm.meeting_type || !meetingForm.meeting_date || !meetingForm.contact_id) {
+      alert('Tipo, fecha y contacto son requeridos');
+      return;
+    }
+
+    try {
+      const meetingData = {
+        opportunity_id: id!,
+        contact_id: meetingForm.contact_id,
+        meeting_type: meetingForm.meeting_type,
+        meeting_date: meetingForm.meeting_date,
+        notes: meetingForm.notes,
+        feeling: meetingForm.feeling,
+      };
+
+      if (editingMeeting) {
+        await db.updateMeeting(editingMeeting.id, meetingData);
+      } else {
+        await db.createMeeting(meetingData);
+      }
+
+      await loadData();
+      setMeetingDialog(false);
+    } catch (error) {
+      console.error('Error guardando reunión:', error);
+      alert('Error al guardar la reunión');
+    }
+  };
+
+  const handleDeleteMeeting = async (meetingId: string) => {
+    try {
+      await db.deleteMeeting(meetingId);
+      setMeetings(prev => prev.filter(m => m.id !== meetingId));
+      setDeleteMeetingDialog(null);
+    } catch (error) {
+      console.error('Error eliminando reunión:', error);
+    }
+  };
+
+  const getFeelingColor = (feeling: string) => {
+    const option = FEELING_OPTIONS.find(f => f.value === feeling);
+    return option?.color || 'bg-gray-500';
+  };
+
+  const getFeelingLabel = (feeling: string) => {
+    const option = FEELING_OPTIONS.find(f => f.value === feeling);
+    return option?.label || feeling;
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-lg">Cargando...</div>
+      </div>
+    );
+  }
+
+  if (!opportunity) {
+    return (
+      <div className="container mx-auto py-8 px-4">
+        <p>Oportunidad no encontrada</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="container mx-auto py-6 px-4">
+      <Button
+        variant="ghost"
+        onClick={() => navigate('/opportunities')}
+        className="mb-4"
+      >
+        <ArrowLeft className="mr-2 h-4 w-4" />
+        Volver a Oportunidades
+      </Button>
+
+      {/* HEADER CON TIER */}
+      <div className="flex justify-between items-start mb-1">
+        <div className="flex items-center gap-10">
+          <h1 className="text-3xl font-bold text-slate-800">
+            Oportunidad: {opportunity.contact.first_name} {opportunity.contact.last_name}
+          </h1>
+          {opportunity.contact.tier && (
+            <span
+              className={`w-20 h-10 rounded-full flex items-center text-white justify-center text-lg font-bold shadow-md ${opportunity.contact.tier === "1" ? "tier-1" :
+                opportunity.contact.tier === "2" ? "tier-2" :
+                  "tier-3"
+                }`}
+            >
+              Tier {opportunity.contact.tier}
+            </span>
+          )}
+        </div>
+        <Button
+          variant="outline"
+          className="rounded-full shadow-sm hover:shadow-md transition-shadow hover:bg-indigo-100"
+          onClick={openEditDialog}>
+          <Pencil className="mr-2 h-4 w-4" />
+          Editar
+        </Button>
+      </div>
+
+      <p className="text-xl text-slate-600 mb-8">
+        {opportunity.contact.title} - {opportunity.contact.organization}
+      </p>
+
+      {/* SECCIÓN SUPERIOR - SIMILAR A CONTACTDETAILPAGE */}
+      <div className="grid grid-cols-12 gap-6 mb-6">
+
+        {/* INFORMACIÓN DE CONTACTO - 4 columnas */}
+        <Card className="border-gray-200 shadow-sm rounded-2xl col-span-4">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg font-semibold text-slate-800">Información de Contacto</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            <div>
+              <span className="font-medium">Nombre:</span>{' '}
+              {opportunity.contact.first_name} {opportunity.contact.last_name}
+            </div>
+            <div>
+              <span className="font-medium">Organización:</span>{' '}
+              {opportunity.contact.organization}
+            </div>
+            <div>
+              <span className="font-medium">Rol:</span>{' '}
+              {opportunity.contact.title}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Mail className="h-4 w-4 text-blue-600" />
+              <a href={`mailto:${opportunity.contact.email}`} className="text-blue-600 hover:underline truncate">
+                {opportunity.contact.email}
+              </a>
+            </div>
+            {opportunity.contact.phone && (
+              <div className="flex items-center gap-2">
+                <Phone className="h-4 w-4 text-blue-600" />
+                <a href={`tel:${opportunity.contact.phone}`} className="text-blue-600 hover:underline">
+                  {opportunity.contact.phone}
+                </a>
+              </div>
+            )}
+            {opportunity.contact.linkedin_url && (
+              <div className="flex items-center gap-2">
+                <a
+                  href={opportunity.contact.linkedin_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center text-blue-600 hover:text-blue-800 gap-2"
+                >
+                  <svg
+                    className="h-5 w-5"
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
+                  </svg>
+                  Ver perfil LinkedIn
+                </a>
+              </div>
+            )}
+
+            {(opportunity.contact.pa_name || opportunity.contact.pa_email || opportunity.contact.pa_phone) && (
+              <div className="pt-3 mt-3 border-t border-gray-200">
+                <p className="font-semibold text-slate-700 mb-1">Personal Assistant</p>
+                {opportunity.contact.pa_name && (
+                  <p className="text-slate-600 mb-1">{opportunity.contact.pa_name}</p>
+                )}
+                {opportunity.contact.pa_email && (
+                  <a
+                    href={`mailto:${opportunity.contact.pa_email}`}
+                    className="text-blue-600 hover:underline flex items-center gap-2"
+                  >
+                    <Mail className="h-4 w-4" />
+                    {opportunity.contact.pa_email}
+                  </a>
+                )}
+                {opportunity.contact.pa_phone && (
+                  <a
+                    href={`tel:${opportunity.contact.pa_phone}`}
+                    className="text-blue-600 hover:underline flex items-center gap-2"
+                  >
+                    <Phone className="h-4 w-4" />
+                    {opportunity.contact.pa_phone}
+                  </a>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* NOTAS DEL CLIENTE - 5 columnas */}
+        <Card className="col-span-5 bg-gradient-to-br from-amber-50 to-amber-100/50 border-amber-200 shadow-sm rounded-2xl">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg font-semibold text-slate-800">Notas sobre el cliente</CardTitle>
+              {!opportunity.contact.notes && !isEditingNotes ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setNotesContent('');
+                    setIsEditingNotes(true);
+                  }}
+                  className="bg-white hover:bg-amber-100 border-amber-300 rounded-full hover:text-slate-800"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Añadir notas
+                </Button>
+              ) : !isEditingNotes ? (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setNotesContent(opportunity.contact.notes || '');
+                    setIsEditingNotes(true);
+                  }}
+                  className="hover:bg-amber-200/50"
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
+              ) : (
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setIsEditingNotes(false);
+                      setNotesContent('');
+                    }}
+                    className="hover:bg-amber-200/50 hover:text-slate-800"
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={async () => {
+                      try {
+                        const contact = await db.getContact(opportunity.contact_id);
+                        const updatedContact = {
+                          ...contact,
+                          notes: notesContent.trim() || null
+                        };
+                        await db.updateContact(opportunity.contact_id, updatedContact);
+
+                        // Actualizar el estado local
+                        setOpportunity({
+                          ...opportunity,
+                          contact: {
+                            ...opportunity.contact,
+                            notes: notesContent.trim() || null
+                          }
+                        });
+
+                        setIsEditingNotes(false);
+                        toast({
+                          title: 'Notas actualizadas',
+                          description: 'Las notas se guardaron correctamente',
+                        });
+                      } catch (error) {
+                        toast({
+                          title: 'Error',
+                          description: 'No se pudieron guardar las notas',
+                          variant: 'destructive',
+                        });
+                      }
+                    }}
+                    className="bg-amber-600 hover:bg-amber-700 text-white"
+                  >
+                    Guardar
+                  </Button>
+                </div>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            {!isEditingNotes ? (
+              opportunity.contact.notes ? (
+                <div className="text-sm text-slate-700 leading-relaxed max-h-[180px] overflow-y-auto">
+                  {opportunity.contact.notes}
+                </div>
+              ) : (
+                <div className="text-center py-6 text-slate-500 text-sm">
+                  No hay notas sobre este cliente
+                </div>
+              )
+            ) : (
+              <Textarea
+                value={notesContent}
+                onChange={(e) => setNotesContent(e.target.value)}
+                placeholder="Escribe notas sobre el cliente..."
+                rows={6}
+                className="text-sm bg-white border-amber-300 focus:border-amber-500 focus:ring-amber-500"
+                autoFocus
+              />
+            )}
+          </CardContent>
+        </Card>
+
+        {/* INFORMACIÓN DE OPORTUNIDAD - 3 columnas */}
+        <Card className="col-span-3 border-gray-200 shadow-sm rounded-2xl">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg font-semibold text-slate-800">Información de Oportunidad</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <div>
+              <span className="font-medium">Estado:</span>{' '}
+              <Badge className={STATUS_COLORS[opportunity.status] || 'bg-gray-500'}>
+                {STATUS_LABELS[opportunity.status] || opportunity.status}
+              </Badge>
+            </div>
+            <div>
+              <span className="font-medium">Oferta Presentada:</span>{' '}
+              <Badge variant={opportunity.offer_presented ? 'default' : 'secondary'}>
+                {opportunity.offer_presented ? 'Sí' : 'No'}
+              </Badge>
+            </div>
+            <div>
+              <span className="font-medium">Interacciones:</span> {meetings.length}
+            </div>
+
+            {/* Solución Propuesta integrada */}
+            {opportunity.proposed_solution && (
+              <div className="pt-3 mt-3 border-t border-gray-200">
+                <p className="font-semibold text-slate-700 mb-2">Solución Propuesta:</p>
+                <p className="text-sm text-slate-600 whitespace-pre-wrap">
+                  {opportunity.proposed_solution}
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ANÁLISIS CON IA */}
+      <Card className="mb-6 bg-gradient-to-br from-indigo-50/20 to-indigo-100/50 border-indigo-200 shadow-sm rounded-2xl">
+        <CardHeader className="pb-4">
+          <CardTitle className="flex items-center gap-2 text-lg font-semibold text-slate-800">
+            <Sparkles className="h-5 w-5 text-indigo-500" />
+            Análisis con IA (Gemini)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-6">
+            {/* Columna izquierda - Botones de análisis */}
+            <div className="flex flex-col h-full gap-3">
+              <h3 className="text-base font-semibold text-slate-700 mb-3">Prompts para AE</h3>
+
+              <Button
+                onClick={() => setCustomPromptDialog(true)}
+                disabled={geminiLoading || qualificationLoading || meetings.length === 0}
+                className="w-full h-full flex flex-col items-center justify-center bg-white hover:bg-indigo-50 text-slate-700 border border-indigo-200 shadow-sm"
+                variant="outline"
+              >
+                {geminiLoading ? (
+                  <Loader2 className="h-5 w-5 mb-1 animate-spin text-indigo-500" />
+                ) : (
+                  <MessageSquare className="h-5 w-5 mb-1 text-indigo-500" />
+                )}
+                <span className="text-sm text-center">Pregunta cualquier cosa sobre la oportunidad</span>
+              </Button>
+
+              {meetings.length === 0 && (
+                <p className="text-xs text-slate-500 mt-2">
+                  Necesitas tener reuniones registradas para usar el análisis con IA
+                </p>
+              )}
+            </div>
+
+            {/* Columna derecha - Iniciativas de cualificación */}
+            <div className="border-l border-indigo-200 pl-6">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-base font-semibold text-slate-700">
+                  Iniciativas para Cualificar (PACT)
+                </h3>
+
+                <div className="flex items-center gap-2">
+                  {lastQualificationUpdate && (
+                    <p className="text-xs italic text-slate-500">
+                      Última actualización: {new Date(lastQualificationUpdate).toLocaleDateString('es-ES', {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric'
+                      })}
+                    </p>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={handleAnalyzeQualification}
+                    disabled={qualificationLoading || meetings.length === 0}
+                    className="hover:bg-indigo-100"
+                  >
+                    {qualificationLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">
+                {qualificationInitiatives.length === 0 ? (
+                  <div className="text-center py-6">
+                    <p className="text-sm text-slate-500 mb-2">
+                      No hay iniciativas analizadas
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleAnalyzeQualification}
+                      disabled={qualificationLoading || meetings.length === 0}
+                      className="bg-white hover:bg-indigo-50 border-indigo-200"
+                    >
+                      {qualificationLoading ? (
+                        <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                      ) : (
+                        <Sparkles className="mr-2 h-3 w-3 text-indigo-500" />
+                      )}
+                      Cualificar Iniciativas del prospect (PACT)
+                    </Button>
+                  </div>
+                ) : (
+                  qualificationInitiatives.map((initiative, index) => (
+                    <div
+                      key={index}
+                      className="bg-white p-3 rounded-lg border border-indigo-100 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all cursor-pointer"
+                      onClick={() => {
+                        setSelectedQualificationInitiative(initiative);
+                        setQualificationDetailDialog(true);
+                      }}
+                    >
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        <h4 className="text-sm font-medium text-slate-800 line-clamp-2">
+                          {initiative.title}
+                        </h4>
+                        {initiative.date && (
+                          <Badge variant="outline" className="text-xs shrink-0">
+                            {initiative.date}
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-600 line-clamp-2">
+                        {initiative.challenge}
+                      </p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* INTERACCIONES */}
+      <Card>
+        <CardHeader>
+          <div className="flex justify-between items-center">
+            <CardTitle className="text-lg font-semibold text-slate-800">Interacciones ({meetings.length})</CardTitle>
+            <Button
+              className="rounded-full shadow-sm hover:shadow-md transition-shadow bg-indigo-500 hover:bg-indigo-600"
+              onClick={() => handleOpenMeetingDialog()}>
+              <Plus className="mr-2 h-4 w-4" />
+              Nueva Reunión
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {meetings.length === 0 ? (
+            <p className="text-center py-8 text-muted-foreground">
+              No hay reuniones registradas
+            </p>
+          ) : (
+            <div className="bg-card rounded-lg shadow overflow-hidden overflow-x-auto">
+              <Table className="w-full table-fixed">
+                <colgroup>
+                  <col className="w-[100px]" />
+                  <col className="w-[120px]" />
+                  <col className="w-[100px]" />
+                  <col className="w-[600px]" />
+                </colgroup>
+                <TableHeader>
+                  <TableRow className="bg-muted hover:bg-muted/50">
+                    <TableHead className="text-center">Fecha</TableHead>
+                    <TableHead className="text-center">Tipo</TableHead>
+                    <TableHead className="text-center">Feeling</TableHead>
+                    <TableHead className="text-center">Notas</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {meetings.map((meeting) => {
+                    const contact = contacts.find(c => c.id === meeting.contact_id);
+                    return (
+                      <TableRow
+                        key={meeting.id}
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => navigate(`/meetings/${meeting.id}`, {
+                          state: { from: 'opportunity', opportunityId: opportunity.id }
+                        })}
+                      >
+                        <TableCell className="text-center">{formatDateTime(meeting.meeting_date)}</TableCell>
+                        <TableCell className="text-center">
+                          <Badge variant="outline" className="text-sm">{meeting.meeting_type}</Badge>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <div className="flex text-center justify-center gap-2">
+                            <div className={`w-4 h-4 rounded-full ${getFeelingColor(meeting.feeling)}`} />
+                            <span className="text-sm text-center">{getFeelingLabel(meeting.feeling)}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="max-w-md truncate">
+                          {meeting.notes || 'Sin notas'}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Dialog de edición de oportunidad */}
+      <Dialog open={opportunityDialog} onOpenChange={setOpportunityDialog}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Editar Oportunidad</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Organización *</Label>
+              <Select
+                value={opportunityForm.organization}
+                onValueChange={handleOrganizationChange}
+                disabled={contacts.length === 0}
+              >
+                <SelectTrigger className={!opportunityForm.organization ? "border-red-500" : ""}>
+                  <SelectValue
+                    placeholder={
+                      contacts.length === 0
+                        ? 'No hay organizaciones disponibles'
+                        : 'Selecciona una organización'
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {[...new Set(contacts.map(c => c.organization))].sort().map((org) => (
+                    <SelectItem key={org} value={org}>
+                      {org}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label>Contacto *</Label>
+              <Select
+                value={opportunityForm.contact_id}
+                onValueChange={(value) => setOpportunityForm({ ...opportunityForm, contact_id: value })}
+                disabled={!opportunityForm.organization || filteredContacts.length === 0}
+              >
+                <SelectTrigger className={!opportunityForm.contact_id ? "border-red-500" : ""}>
+                  <SelectValue
+                    placeholder={
+                      !opportunityForm.organization
+                        ? 'Primero selecciona una organización'
+                        : filteredContacts.length === 0
+                          ? 'No hay contactos disponibles'
+                          : 'Selecciona un contacto'
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {filteredContacts
+                    .sort((a, b) =>
+                      `${a.first_name} ${a.last_name}`.localeCompare(
+                        `${b.first_name} ${b.last_name}`
+                      )
+                    )
+                    .map((contact) => (
+                      <SelectItem key={contact.id} value={contact.id}>
+                        {contact.first_name} {contact.last_name} ({contact.title})
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label>Estado *</Label>
+              <Select
+                value={opportunityForm.status}
+                onValueChange={(value) => setOpportunityForm({ ...opportunityForm, status: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {STATUSES.map((status) => (
+                    <SelectItem key={status.value} value={status.value}>
+                      {status.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label>Solución Propuesta *</Label>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Select
+                    value={opportunityForm.solution_type}
+                    onValueChange={(value) => setOpportunityForm({ ...opportunityForm, solution_type: value })}
+                  >
+                    <SelectTrigger className={!opportunityForm.solution_type ? "border-red-500" : ""}>
+                      <SelectValue placeholder="Tipo de solución" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SOLUTION_TYPES.map((type) => (
+                        <SelectItem key={type} value={type}>
+                          {type}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Select
+                    value={opportunityForm.solution_mode}
+                    onValueChange={(value) => setOpportunityForm({ ...opportunityForm, solution_mode: value })}
+                  >
+                    <SelectTrigger className={!opportunityForm.solution_mode ? "border-red-500" : ""}>
+                      <SelectValue placeholder="Modo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SOLUTION_MODES.map((mode) => (
+                        <SelectItem key={mode} value={mode}>
+                          {mode}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Switch
+                checked={opportunityForm.offer_presented}
+                onCheckedChange={(checked) => setOpportunityForm({ ...opportunityForm, offer_presented: checked })}
+              />
+              <Label>Oferta presentada</Label>
+            </div>
+          </div>
+          <div className="flex justify-end gap-3">
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => setDeleteOpportunityDialog(true)}
+              className="mr-auto"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setOpportunityDialog(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={handleSaveOpportunity}>
+                Actualizar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de confirmación de eliminación de oportunidad */}
+      <AlertDialog
+        open={deleteOpportunityDialog}
+        onOpenChange={setDeleteOpportunityDialog}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar oportunidad?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción no se puede deshacer. El contacto volverá a ser Prospect.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteOpportunity}>
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Dialog de reuniones */}
+      <Dialog open={meetingDialog} onOpenChange={setMeetingDialog}>
+        <DialogContent className="max-w-7xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {editingMeeting ? 'Editar Reunión' : 'Nueva Reunión'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="meeting_type">Tipo de Reunión *</Label>
+              <Select
+                value={meetingForm.meeting_type}
+                onValueChange={(value) => setMeetingForm({ ...meetingForm, meeting_type: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccionar tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  {MEETING_TYPES.map((type) => (
+                    <SelectItem key={type.value} value={type.value}>
+                      {type.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="meeting_date">Fecha *</Label>
+              <Input
+                id="meeting_date"
+                type="date"
+                value={meetingForm.meeting_date}
+                onChange={(e) => setMeetingForm({ ...meetingForm, meeting_date: e.target.value })}
+                required
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="feeling">Sensación de la Reunión</Label>
+              <Select
+                value={meetingForm.feeling}
+                onValueChange={(value) => setMeetingForm({ ...meetingForm, feeling: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {FEELING_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      <div className="flex items-center gap-2">
+                        <div className={`w-3 h-3 rounded-full ${option.color}`} />
+                        {option.label}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="notes">Notas</Label>
+            <Textarea
+              id="notes"
+              value={meetingForm.notes}
+              onChange={(e) =>
+                setMeetingForm({ ...meetingForm, notes: e.target.value })
+              }
+              rows={30}
+              placeholder="Notas de la reunión..."
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMeetingDialog(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSaveMeeting}>
+              {editingMeeting ? 'Actualizar' : 'Crear'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog
+        open={!!deleteMeetingDialog}
+        onOpenChange={() => setDeleteMeetingDialog(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar reunión?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteMeetingDialog && handleDeleteMeeting(deleteMeetingDialog)}
+            >
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Dialog de análisis Gemini */}
+      <Dialog open={geminiDialog} onOpenChange={setGeminiDialog}>
+        <DialogContent className="max-w-4xl max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-purple-500" />
+              Análisis con IA
+            </DialogTitle>
+          </DialogHeader>
+          <div className="overflow-y-auto max-h-[60vh]">
+            <div className="prose prose-sm max-w-none">
+              <pre className="whitespace-pre-wrap text-sm bg-muted p-4 rounded-lg">
+                {geminiResult}
+              </pre>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={copyToClipboard}>
+              <Copy className="mr-2 h-4 w-4" />
+              Copiar
+            </Button>
+            <Button onClick={() => setGeminiDialog(false)}>
+              Cerrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de prompt personalizado */}
+      <Dialog open={customPromptDialog} onOpenChange={setCustomPromptDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Prompt personalizado</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Tu pregunta personalizada:</Label>
+              <p className="text-sm text-muted-foreground mb-2">
+                El prompt comenzará con: "En base a la información de las interacciones, que son emails y notas de reuniones de un comercial de Gartner..."
+              </p>
+              <Textarea
+                value={customPrompt}
+                onChange={(e) => setCustomPrompt(e.target.value)}
+                placeholder="Escribe aquí tu pregunta personalizada..."
+                rows={8}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCustomPromptDialog(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleCustomPrompt} disabled={!customPrompt.trim()}>
+              Analizar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* Dialog de detalle de iniciativa de cualificación */}
+      <Dialog open={qualificationDetailDialog} onOpenChange={setQualificationDetailDialog}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold text-slate-800">
+              {selectedQualificationInitiative?.title}
+            </DialogTitle>
+          </DialogHeader>
+
+          {selectedQualificationInitiative && (
+            <div className="space-y-4">
+              {/* Información general */}
+
+              {/* Descripción detallada */}
+              {selectedQualificationInitiative.detail_description && (
+                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                  <h3 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                    <ClipboardList className="h-4 w-4 text-blue-600" />
+                    Descripción Detallada
+                  </h3>
+                  <div className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap max-h-[200px] overflow-y-auto">
+                    {selectedQualificationInitiative.detail_description}
+                  </div>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-indigo-50 p-3 rounded-lg border border-indigo-200">
+                  <h3 className="text-xs font-semibold text-slate-700 mb-1">Reto Principal</h3>
+                  <p className="text-sm text-slate-700">
+                    {selectedQualificationInitiative.challenge || 'No especificado'}
+                  </p>
+                </div>
+
+                <div className="bg-green-50 p-3 rounded-lg border border-green-200">
+                  <h3 className="text-xs font-semibold text-slate-700 mb-1">Responsable</h3>
+                  <p className="text-sm text-slate-700">
+                    {selectedQualificationInitiative.owner || 'No especificado'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-amber-50 p-3 rounded-lg border border-amber-200">
+                  <h3 className="text-xs font-semibold text-slate-700 mb-1">Coste Estimado</h3>
+                  <p className="text-sm text-slate-700">
+                    {selectedQualificationInitiative.cost || 'No especificado'}
+                  </p>
+                </div>
+
+                <div className="bg-red-50 p-3 rounded-lg border border-red-200">
+                  <h3 className="text-xs font-semibold text-slate-700 mb-1">Fecha Límite</h3>
+                  <p className="text-sm text-slate-700">
+                    {selectedQualificationInitiative.date || 'No especificada'}
+                  </p>
+                </div>
+              </div>
+
+
+
+              {/* Valor que Gartner puede aportar */}
+              {selectedQualificationInitiative.gartner_value && (
+                <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                  <h3 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                    <TrendingUp className="h-4 w-4 text-purple-600" />
+                    Valor que Gartner Puede Aportar
+                  </h3>
+                  <div className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap max-h-[200px] overflow-y-auto">
+                    {selectedQualificationInitiative.gartner_value}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                const content = `
+                INICIATIVA: ${selectedQualificationInitiative?.title}
+
+                RETO PRINCIPAL:
+                ${selectedQualificationInitiative?.challenge || 'No especificado'}
+
+                RESPONSABLE: ${selectedQualificationInitiative?.owner || 'No especificado'}
+
+                COSTE ESTIMADO: ${selectedQualificationInitiative?.cost || 'No especificado'}
+
+                FECHA LÍMITE: ${selectedQualificationInitiative?.date || 'No especificada'}
+
+                DESCRIPCIÓN DETALLADA:
+                ${selectedQualificationInitiative?.detail_description || 'No especificada'}
+
+                VALOR QUE GARTNER PUEDE APORTAR:
+                ${selectedQualificationInitiative?.gartner_value || 'No especificado'}
+                `.trim();
+
+                navigator.clipboard.writeText(content);
+                toast({
+                  title: 'Copiado',
+                  description: 'Iniciativa copiada al portapapeles',
+                });
+              }}
+            >
+              <Copy className="mr-2 h-4 w-4" />
+              Copiar
+            </Button>
+            <Button onClick={() => setQualificationDetailDialog(false)}>
+              Cerrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
