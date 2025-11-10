@@ -161,8 +161,15 @@ const SOLUTION_TYPES = [
 
 const SOLUTION_MODES = ['Guided', 'Self-directed'];
 
-const generateNotesFile = (meetings: Meeting[]): string => {
+const generateNotesFile = (meetings: Meeting[], opportunity: Opportunity): string => {
   let content = '=== HISTORIAL DE INTERACCIONES ===\n\n';
+  content += `Nombre del contacto: ${opportunity.contact.first_name} ${opportunity.contact.last_name}\n`;
+  content += `Título del contacto: ${opportunity.contact.title}\n`;
+  content += `Organización del contacto: ${opportunity.contact.organization}\n`;
+  content += `Tipo de contacto: Oportunidad\n`;
+  content += `Notas generales del cliente: ${opportunity.contact.notes}\n`;
+  content += `Estado de la opotunidad: ${opportunity.status}\n`;
+  content += `Solución propuesta en la opotunidad: ${opportunity.proposed_solution}\n`;
 
   const sortedMeetings = [...meetings].sort((a, b) =>
     new Date(b.meeting_date).getTime() - new Date(a.meeting_date).getTime()

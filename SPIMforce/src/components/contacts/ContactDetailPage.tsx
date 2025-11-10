@@ -109,13 +109,18 @@ const EP_LIST = [
   { ep_name: "Francisco Javier de los Santos", ep_email: "francisco.delossantos@gartner.com" },
   { ep_name: "Manuel Torres", ep_email: "manuel.torres2@gartner.com" }];
 
-const generateNotesFile = (meetings: Meeting[]): string => {
+const generateNotesFile = (meetings: Meeting[], contact: Contact): string => {
   let content = '=== HISTORIAL DE INTERACCIONES ===\n\n';
-  
+  content += `Nombre del contacto: ${contact.first_name} ${contact.last_name}\n`;
+  content += `Título del contacto: ${contact.title}\n`;
+  content += `Organización del contacto: ${contact.organization}\n`;
+  content += `Tipo de contacto: ${contact.contact_type}\n`;
+  content += `Notas generales del cliente: ${contact.notes}\n`;
+
   const sortedMeetings = [...meetings].sort((a, b) => 
     new Date(b.meeting_date).getTime() - new Date(a.meeting_date).getTime()
   );
-  
+
   sortedMeetings.forEach((meeting, index) => {
     content += `\n${'='.repeat(80)}\n`;
     content += `INTERACCIÓN ${index + 1}\n`;
@@ -205,6 +210,7 @@ export default function ContactDetailPage() {
   const [isNewMeetingDialogOpen, setIsNewMeetingDialogOpen] = useState(false);
   const [deleteMeetingDialog, setDeleteMeetingDialog] = useState<string | null>(null);
   const [geminiLoading, setGeminiLoading] = useState(false);
+  const [geminiInitiativesLoading, setGeminiInitiativesLoading] = useState(false);
   const [geminiDialog, setGeminiDialog] = useState(false);
   const [geminiResult, setGeminiResult] = useState('');
   const [customPromptDialog, setCustomPromptDialog] = useState(false);
@@ -229,8 +235,6 @@ export default function ContactDetailPage() {
   gartner_value: string;
   } | null>(null);
   const [initiativeDetailDialog, setInitiativeDetailDialog] = useState(false);
-  
-  const [initiativesLoading, setInitiativesLoading] = useState(false);
   
   const [lastInitiativesUpdate, setLastInitiativesUpdate] = useState<string | null>(null);
   
@@ -345,139 +349,7 @@ const [formData, setFormData] = useState({
                 }
 `;
 
-    useEffect(() => {
-      if (id) {
-        loadData();
-      }
-    }, [id]);
-
-    useEffect(() => {
-      if (contact && contact.ai_initiatives) {
-        try {
-          const parsed = JSON.parse(contact.ai_initiatives);
-          setInitiatives(parsed.initiatives || []);
-          setLastInitiativesUpdate(parsed.lastUpdate || null);
-        } catch (error) {
-          console.error('Error cargando iniciativas:', error);
-        }
-      }
-    }, [contact]);
-
-const handleAnalyzeValue = async () => {
-  if (meetings.length === 0) {
-    toast({
-      title: 'Sin información',
-      description: 'No hay reuniones registradas para analizar',
-      variant: 'destructive',
-    });
-    return;
-  }
-
-  setGeminiLoading(true);
-  try {
-    console.log('📊 Iniciando análisis de valor...');
-    const notesContent = generateNotesFile(meetings);
-    const result = await analyzeWithGemini(notesContent, PROMPT_ANALISIS_VALOR);
-    
-    // Parsear JSON de la respuesta
-    const jsonMatch = result.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error('No se pudo extraer JSON de la respuesta');
-    }
-    
-    const parsed = JSON.parse(jsonMatch[0]);
-    const extractedInitiatives = parsed.initiatives || [];
-    const extractedOpportunities = parsed.opportunities || [];
-    
-    setValueInitiatives(extractedInitiatives);
-    setValueOpportunities(extractedOpportunities);
-    setValueAnalysisDialog(true);
-    
-    toast({
-      title: 'Análisis completado',
-      description: `${extractedInitiatives.length} iniciativa(s) y ${extractedOpportunities.length} oportunidad(es) encontradas`,
-    });
-  } catch (error) {
-    console.error('Error con Gemini:', error);
-    toast({
-      title: 'Error',
-      description: error instanceof Error ? error.message : 'Error al analizar con Gemini',
-      variant: 'destructive',
-    });
-  } finally {
-    setGeminiLoading(false);
-  }
-};
-
-const handleCustomPrompt = async () => {
-  if (!customPrompt.trim()) {
-    toast({
-      title: 'Prompt requerido',
-      description: 'Por favor, escribe un prompt personalizado',
-      variant: 'destructive',
-    });
-    return;
-  }
-
-  if (meetings.length === 0) {
-    toast({
-      title: 'Sin información',
-      description: 'No hay reuniones registradas para analizar',
-      variant: 'destructive',
-    });
-    return;
-  }
-
-  setGeminiLoading(true);
-  setCustomPromptDialog(false);
-  
-  try {
-    const basePrompt = `En base a la información del fichero adjunto, que son emails y notas de reuniones de un comercial de la empresa Gartner con un cliente/prospect, ${customPrompt}`;
-    const notesContent = generateNotesFile(meetings);
-    const result = await analyzeWithGemini(notesContent, basePrompt);
-    setGeminiResult(result);
-    setGeminiDialog(true);
-  } catch (error) {
-    console.error('Error con Gemini:', error);
-    toast({
-      title: 'Error',
-      description: error instanceof Error ? error.message : 'Error al analizar con Gemini',
-      variant: 'destructive',
-    });
-  } finally {
-    setGeminiLoading(false);
-  }
-};
-
-const analyzeInitiatives = async () => {
-  if (meetings.length === 0) {
-    toast({
-      title: 'Sin información',
-      description: 'No hay reuniones registradas para analizar',
-      variant: 'destructive',
-    });
-    return;
-  }
-
-  setInitiativesLoading(true);
-  try {
-    console.log('📊 Iniciando análisis de iniciativas...');
-    
-    // Filtrar reuniones del último año
-    const recentMeetings = meetings.filter(m => {
-      const meetingDate = new Date(m.meeting_date);
-      const oneYearAgo = new Date();
-      oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-      return meetingDate >= oneYearAgo;
-    });
-    
-    console.log(`📄 Analizando ${recentMeetings.length} reuniones del último año`);
-    
-    // Generar archivo de notas usando la misma función que los otros prompts
-    const notesContent = generateNotesFile(recentMeetings);
-    console.log(`📊 Archivo generado: ${notesContent.length} caracteres`);
-    
-    const initiativesPrompt = `Analiza este historial de interacciones de un cliente de Gartner del último año, extrae las grandes iniciativas en las que se ha dado soporte con una descripción detallada de las actividades realizadas y el valor aportado gracias al soporte ofrecido.
+const PROMPT_ANALISIS_INICIATIVAS = `Analiza este historial de interacciones de un cliente de Gartner del último año, extrae las grandes iniciativas en las que se ha dado soporte con una descripción detallada de las actividades realizadas y el valor aportado gracias al soporte ofrecido.
 
     IMPORTANTE: 
     - Solo iniciativas más relevantes, prioritarias y grandes (proyectos, implementaciones, evaluaciones)
@@ -512,65 +384,92 @@ const analyzeInitiatives = async () => {
       "initiatives": []
     }`;
 
-    // Usar analyzeWithGemini igual que los otros prompts
-    const geminiKey = (window as any).__GEMINI_API_KEY__ || '';
-    
-    if (!geminiKey) {
-      throw new Error('GEMINI_API_KEY no configurada');
-    }
-
-    const fullPrompt = `${initiativesPrompt}
-
-INFORMACIÓN DEL CLIENTE:
-${notesContent}`;
-
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${geminiKey}`;
-    
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 120000);
-    
-    console.log('🚀 Enviando a Gemini con archivo adjunto...');
-    
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{
-          parts: [{
-            text: fullPrompt
-          }]
-        }],
-        generationConfig: {
-          temperature: 0.5,
-          topK: 20,
-          topP: 0.8,
-          maxOutputTokens: 10000,
-        }
-      }),
-      signal: controller.signal
-    });
-    
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      
-      if (errorData.error?.code === 429) {
-        throw new Error('Has alcanzado el límite de la API de Gemini. Por favor, espera unos minutos e intenta de nuevo.');
+    useEffect(() => {
+      if (id) {
+        loadData();
       }
-      
-      throw new Error(`Error Gemini API: ${response.status}`);
-    }
+    }, [id]);
 
-    const data = await response.json();
+    useEffect(() => {
+      if (contact && contact.ai_initiatives) {
+        try {
+          const parsed = JSON.parse(contact.ai_initiatives);
+          setInitiatives(parsed.initiatives || []);
+          setLastInitiativesUpdate(parsed.lastUpdate || null);
+        } catch (error) {
+          console.error('Error cargando iniciativas:', error);
+        }
+      }
+    }, [contact]);
+
+const handleAnalyzeValue = async () => {
+  if (meetings.length === 0) {
+    toast({
+      title: 'Sin información',
+      description: 'No hay reuniones registradas para analizar',
+      variant: 'destructive',
+    });
+    return;
+  }
+
+  setGeminiLoading(true);
+  try {
+    console.log('📊 Iniciando análisis de valor...');
+    const notesContent = generateNotesFile(meetings, contact);
+    console.log(`📊 Archivo generado: ${notesContent.length} caracteres`);
+
+    const result = await analyzeWithGemini(notesContent, PROMPT_ANALISIS_VALOR);
+
+    // Parsear JSON de la respuesta
+    const jsonMatch = result.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error('No se pudo extraer JSON de la respuesta');
+    }
     
-    if (!data.candidates || !data.candidates[0]?.content?.parts?.[0]?.text) {
-      throw new Error('Respuesta inesperada de Gemini');
-    }
+    const parsed = JSON.parse(jsonMatch[0]);
+    const extractedInitiatives = parsed.initiatives || [];
+    const extractedOpportunities = parsed.opportunities || [];
+    
+    setValueInitiatives(extractedInitiatives);
+    setValueOpportunities(extractedOpportunities);
+    setValueAnalysisDialog(true);
+    
+    toast({
+      title: 'Análisis completado',
+      description: `${extractedInitiatives.length} iniciativa(s) y ${extractedOpportunities.length} oportunidad(es) encontradas`,
+    });
+  } catch (error) {
+    console.error('Error con Gemini:', error);
+    toast({
+      title: 'Error',
+      description: error instanceof Error ? error.message : 'Error al analizar con Gemini',
+      variant: 'destructive',
+    });
+  } finally {
+    setGeminiLoading(false);
+  }
+};
 
-    const result = data.candidates[0].content.parts[0].text;
+const handleAnalyzeInitiatives = async () => {
+  if (meetings.length === 0) {
+    toast({
+      title: 'Sin información',
+      description: 'No hay reuniones registradas para analizar',
+      variant: 'destructive',
+    });
+    return;
+  }
+
+  setGeminiInitiativesLoading(true);
+  try {
+    console.log('📊 Iniciando análisis de iniciativas...');
+    const notesContent = generateNotesFile(meetings, contact);
+    console.log(`📊 Archivo generado: ${notesContent.length} caracteres`);
+
+    const result = await analyzeWithGemini(notesContent, PROMPT_ANALISIS_INICIATIVAS);
     console.log('✅ Respuesta recibida de Gemini');
     
+    // Parsear JSON de la respuesta
     const jsonMatch = result.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       throw new Error('No se pudo extraer JSON de la respuesta');
@@ -619,7 +518,47 @@ ${notesContent}`;
       variant: 'destructive',
     });
   } finally {
-    setInitiativesLoading(false);
+    setGeminiInitiativesLoading(false);
+  }
+};
+
+const handleCustomPrompt = async () => {
+  if (!customPrompt.trim()) {
+    toast({
+      title: 'Prompt requerido',
+      description: 'Por favor, escribe un prompt personalizado',
+      variant: 'destructive',
+    });
+    return;
+  }
+
+  if (meetings.length === 0) {
+    toast({
+      title: 'Sin información',
+      description: 'No hay reuniones registradas para analizar',
+      variant: 'destructive',
+    });
+    return;
+  }
+
+  setGeminiLoading(true);
+  setCustomPromptDialog(false);
+  
+  try {
+    const basePrompt = `En base a la información del fichero adjunto, que son emails y notas de reuniones de un comercial de la empresa Gartner con un cliente/prospect, ${customPrompt}`;
+    const notesContent = generateNotesFile(meetings, contact);
+    const result = await analyzeWithGemini(notesContent, basePrompt);
+    setGeminiResult(result);
+    setGeminiDialog(true);
+  } catch (error) {
+    console.error('Error con Gemini:', error);
+    toast({
+      title: 'Error',
+      description: error instanceof Error ? error.message : 'Error al analizar con Gemini',
+      variant: 'destructive',
+    });
+  } finally {
+    setGeminiLoading(false);
   }
 };
 
@@ -1273,7 +1212,7 @@ const handleShowMore = () => {
               <h3 className="text-base font-semibold text-slate-700 mb-3">Prompts para AE</h3>
                 <Button
                   onClick={handleAnalyzeValue}
-                  disabled={geminiLoading || meetings.length === 0}
+                  disabled={geminiLoading || geminiInitiativesLoading || meetings.length === 0}
                   className="w-full h-full flex flex-col items-center justify-center bg-white hover:bg-indigo-50 text-slate-700 border border-indigo-200 shadow-sm"
                   variant="outline"
                 >
@@ -1287,7 +1226,7 @@ const handleShowMore = () => {
               
               <Button 
                 onClick={() => setCustomPromptDialog(true)}
-                disabled={geminiLoading || meetings.length === 0}
+                disabled={geminiLoading || geminiInitiativesLoading || meetings.length === 0}
                 className="w-full h-full flex flex-col items-center justify-center bg-white hover:bg-indigo-50 text-slate-700 border border-indigo-200 shadow-sm"
                 variant="outline"
               >
@@ -1322,11 +1261,11 @@ const handleShowMore = () => {
                   <Button
                     size="sm"
                     variant="ghost"
-                    onClick={analyzeInitiatives}
-                    disabled={initiativesLoading || meetings.length === 0}
+                    onClick={handleAnalyzeInitiatives}
+                    disabled={geminiLoading || geminiInitiativesLoading || meetings.length === 0}
                     className="hover:bg-indigo-100"
                   >
-                    {initiativesLoading ? (
+                    {geminiInitiativesLoading ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
                       <RefreshCw className="h-4 w-4" />
@@ -1344,11 +1283,11 @@ const handleShowMore = () => {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={analyzeInitiatives}
-                    disabled={initiativesLoading || meetings.length === 0}
+                    onClick={handleAnalyzeInitiatives}
+                    disabled={geminiLoading || geminiInitiativesLoading || meetings.length === 0}
                     className="bg-white hover:bg-indigo-50 border-indigo-200"
                   >
-                    {initiativesLoading ? (
+                    {geminiInitiativesLoading ? (
                       <Loader2 className="mr-2 h-3 w-3 animate-spin" />
                     ) : (
                       <Sparkles className="mr-2 h-3 w-3 text-indigo-500" />

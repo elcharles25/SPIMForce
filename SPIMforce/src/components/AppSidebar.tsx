@@ -33,7 +33,7 @@ export function AppSidebar() {
           <SidebarGroupLabel>
             <div className="mt-6 h-10 w-10 flex items-center gap-2">
               <img
-                src="/public/CharlesForceSidebar.png"
+                src="/favicon.png"
                 className={open ? "text-xl" : ""}></img>
                 {open && <span className="text-4xl font-charles">SPIMForce</span>}
             </div>
