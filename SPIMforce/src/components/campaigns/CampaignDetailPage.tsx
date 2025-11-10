@@ -324,7 +324,7 @@ export default function CampaignDetailPage() {
             <div className="flex items-start justify-between">
               <div>
                 <CardTitle className="text-2xl flex items-center gap-3">
-                  Campaña: {campaign.contacts.first_name} {campaign.contacts.last_name}
+                  Campaña: {campaign.contacts.first_name} {campaign.contacts.last_name} ({campaign.campaign_templates.name})
                 </CardTitle>
                 <p className="text-lg text-muted-foreground mt-2">
                   {campaign.contacts.title} - {campaign.contacts.organization}
@@ -379,12 +379,16 @@ export default function CampaignDetailPage() {
                 </Badge>
               </div>
               <div className="flex-1">
+                <p className="text-sm text-muted-foreground">Tipo de campaña</p>
+                <p className="text-sm font-semibold">{campaign.campaign_templates.name}</p>
+              </div>
+              <div className="flex-1">
                 <p className="text-sm text-muted-foreground">Emails enviados</p>
-                <p className="text-lg font-semibold">{campaign.emails_sent} / 5</p>
+                <p className="text-sm font-semibold">{campaign.emails_sent} / 5</p>
               </div>
               <div className="flex-1">
                 <p className="text-sm text-muted-foreground">Campaña activa</p>
-                <p className="text-lg font-semibold">{campaign.start_campaign ? 'Sí' : 'No'}</p>
+                <p className="text-sm font-semibold">{campaign.start_campaign ? 'Sí' : 'No'}</p>
               </div>
 
           </CardContent>
