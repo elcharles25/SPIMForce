@@ -1759,7 +1759,7 @@ const handleShowMore = () => {
                   <SelectItem value="QBR 90">QBR 90</SelectItem>
                   <SelectItem value="QBR MIDYEAR">QBR MIDYEAR</SelectItem>
                   <SelectItem value="QBR AA90">QBR AA90</SelectItem>
-                  <SelectItem value="Delivery">Email</SelectItem>
+                  <SelectItem value="Email">Email</SelectItem>
                   <SelectItem value="Delivery">Delivery</SelectItem>
                   <SelectItem value="Otros">Otros</SelectItem>
                   </SelectContent>
