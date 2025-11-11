@@ -1440,7 +1440,8 @@ const handleShowMore = () => {
                           meeting.meeting_type === "Email"
                             ? ""
                             : meeting.meeting_type === "Otros" ? "bg-slate-100 text-slate-700 border-slate-300"
-                            : "bg-green-100 text-green-700 border-green-300"
+                            : meeting.meeting_type === "Delivery" ? "bg-blue-50 text-blue-700 border-blue-300"
+                            : "bg-green-50 text-green-700 border-green-300"
                         }`}
                       >
                         {meeting.meeting_type}
