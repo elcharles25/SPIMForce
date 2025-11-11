@@ -1646,7 +1646,6 @@ app.post('/api/campaigns/check-all-replies', async (req, res) => {
 
     console.log('📊 Obteniendo campañas de la base de datos...');
 
-    // Obtener TODAS las campañas (no solo activas)
     const { data: campaigns, error: campaignsError } = await getCampaigns()
 
     if (campaignsError) {
@@ -1666,16 +1665,16 @@ app.post('/api/campaigns/check-all-replies', async (req, res) => {
 
     console.log(`📬 Verificando ${campaigns.length} campañas...`);
 
-    // Leer inbox una sola vez
-    console.log('📥 Leyendo inbox de Outlook...');
-    const emails = await readOutlookInbox(daysBack);
-    console.log(`📧 Total emails leídos: ${emails.length}`);
+    // ⭐ CAMBIO: Usar getEmailsWithCache en lugar de readOutlookInbox
+    console.log('📥 Obteniendo emails (caché + inbox reciente)...');
+    const emails = await getEmailsWithCache(daysBack);
+    console.log(`📧 Total emails obtenidos: ${emails.length}`);
 
     if (emails.length === 0) {
-      console.log('⚠️ No se encontraron emails en el inbox');
+      console.log('⚠️ No se encontraron emails en caché ni inbox');
       return res.json({
         success: true,
-        message: 'No hay emails en el inbox',
+        message: 'No hay emails disponibles',
         totalCampaigns: campaigns.length,
         repliedCount: 0
       });
@@ -1700,14 +1699,16 @@ app.post('/api/campaigns/check-all-replies', async (req, res) => {
 
       console.log(`\n🔍 Verificando: ${contact.first_name} ${contact.last_name} (${contact.email})`);
 
-      const csmName = contactData.csm_name || null;
-      const epName = contactData.ep_name || null;
-      const firstName = contactData.first_name || '';
-      const lastName = contactData.last_name || '';
+      const csmName = contact.csm_name || null;
+      const epName = contact.ep_name || null;
+      const firstName = contact.first_name || '';
+      const lastName = contact.last_name || '';
+      const csmEmail = contact.csm_email || null;
+      const epEmail = contact.ep_email || null;
 
       const replyInfo = checkContactReplies(
         emails, 
-        contactEmail, 
+        contact.email, 
         csmEmail, 
         epEmail, 
         firstName,
@@ -1716,7 +1717,6 @@ app.post('/api/campaigns/check-all-replies', async (req, res) => {
         epName
       );
 
-      // Siempre actualizar en base de datos (incluso si no ha respondido)
       const updateData = {
         has_replied: replyInfo.hasReplied,
         last_reply_date: replyInfo.lastReplyDate
@@ -2498,7 +2498,66 @@ app.get('/api/inbox/debug-cache', async (req, res) => {
   res.json(info);
 });
 
+/**
+ * GET /api/outlook/cache
+ * Lee emails desde los archivos de caché
+ */
+app.get('/api/outlook/cache', async (req, res) => {
+  try {
+    const daysBack = typeof req.query.days === 'string' ? parseInt(req.query.days) : 30;
+    
+    console.log(`📂 Leyendo caché (últimos ${daysBack} días)...`);
+    
+    const today = new Date();
+    const startDateObj = new Date(today);
+    startDateObj.setDate(startDateObj.getDate() - daysBack);
+    const startDateStr = startDateObj.toISOString().split('T')[0];
+    const endDateStr = today.toISOString().split('T')[0];
+    
+    const emails = await readFromCache(startDateStr, endDateStr);
+    
+    res.json({
+      success: true,
+      count: emails.length,
+      daysBack,
+      emails
+    });
+  } catch (error) {
+    console.error('Error leyendo caché:', error);
+    res.status(500).json({ 
+      error: error instanceof Error ? error.message : 'Unknown error',
+      emails: []
+    });
+  }
+});
 
+/**
+ * GET /api/outlook/emails-with-cache
+ * Obtiene emails combinando caché + inbox reciente (delta)
+ * Usa la función getEmailsWithCache() existente
+ */
+app.get('/api/outlook/emails-with-cache', async (req, res) => {
+  try {
+    const daysBack = typeof req.query.days === 'string' ? parseInt(req.query.days) : 30;
+    
+    console.log(`📧 Obteniendo emails con caché (últimos ${daysBack} días)...`);
+    
+    const emails = await getEmailsWithCache(daysBack);
+    
+    res.json({
+      success: true,
+      count: emails.length,
+      daysBack,
+      emails
+    });
+  } catch (error) {
+    console.error('Error obteniendo emails con caché:', error);
+    res.status(500).json({ 
+      error: error instanceof Error ? error.message : 'Unknown error',
+      emails: []
+    });
+  }
+});
 
   app.listen(PORT, () => {
     console.log(`\n✅ Servidor de email ejecutándose en http://localhost:${PORT}`);

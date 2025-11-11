@@ -136,7 +136,6 @@ export const CampaignList = () => {
  useEffect(() => {
   if (campaigns.length > 0 && !loading && !isSending) {
     console.log('INICIANDO AUTO-ENVÍO');
-    autoSendDailyEmails();
 
     // Verificar si se debe ejecutar la comprobación automática
     const lastCheck = localStorage.getItem('last_email_check');
@@ -154,6 +153,18 @@ export const CampaignList = () => {
   }
 }, [campaigns.length, loading]);
 
+useEffect(() => {
+  const handleCampaignsUpdated = () => {
+    console.log('📢 Evento campaignsUpdated recibido, recargando campañas...');
+    fetchCampaigns();
+  };
+
+  window.addEventListener('campaignsUpdated', handleCampaignsUpdated);
+
+  return () => {
+    window.removeEventListener('campaignsUpdated', handleCampaignsUpdated);
+  };
+}, []);
 
 /**
  * Calcula el estado de una campaña
@@ -299,96 +310,34 @@ const handleDateChange = (emailNumber: number, newDate: string) => {
   recalculateDatesFrom(emailNumber, newDate);
 };
 
- const autoSendDailyEmails = async () => {
-    if (isSending) {
-      console.log('Ya hay un envío en curso, saltando...');
-      return;
-    }
-
-    try {
-      setIsSending(true);
-      console.log('Verificando emails para enviar...');
-      const today = new Date();
-      const localDate = today.toLocaleDateString('en-CA');
-
-      for (const campaign of campaigns) {
-        if (!campaign.start_campaign) continue;
-
-        for (let i = 1; i <= 5; i++) {
-          const dateField = `email_${i}_date` as keyof Campaign;
-          const emailDate = campaign[dateField];
-          const emailDateOnly = emailDate ? String(emailDate).split('T')[0] : null;
-
-          if (emailDateOnly && emailDateOnly <= localDate && campaign.emails_sent < i) {
-            console.log(`Auto-enviando email ${i} para campaña ${campaign.id}`);
-            console.log(`Fecha original: ${emailDateOnly}, Fecha actual: ${localDate}`);
-            console.log(`Emails enviados antes: ${campaign.emails_sent}`);
-            
-            await sendEmail(campaign, i);
-            
-            if (emailDateOnly < localDate) {
-              console.log(`Email ${i} estaba atrasado, actualizando fechas...`);
-              
-              const updatedDates: any = {};
-              updatedDates[`email_${i}_date`] = localDate;
-              
-              const baseDate = new Date(localDate);
-              baseDate.setHours(0, 0, 0, 0);
-              
-              for (let j = i + 1; j <= 5; j++) {
-                baseDate.setDate(baseDate.getDate() + 3);
-                const year = baseDate.getFullYear();
-                const month = String(baseDate.getMonth() + 1).padStart(2, '0');
-                const day = String(baseDate.getDate()).padStart(2, '0');
-                updatedDates[`email_${j}_date`] = `${year}-${month}-${day}`;
-              }
-              
-              console.log('Fechas actualizadas:', updatedDates);
-              await db.updateCampaign(campaign.id, updatedDates);
-            }
-            
-            break;
-          }
-        }
-      }
-    } catch (e) {
-      console.log('Auto send completed with error:', e);
-    } finally {
-      setIsSending(false);
-    }
-  };
-
 const checkAllReplies = async () => {
   setCheckingReplies(true);
   try {
-    console.log('🔍 Paso 1: Leyendo emails de Outlook desde backend...');
+    console.log('🔍 Paso 1: Obteniendo emails (caché + delta del inbox)...');
 
-    // LLAMADA AL BACKEND - Leer inbox de Outlook
-    const response = await fetch('http://localhost:3002/api/outlook/inbox?days=30');
+    // LLAMADA AL BACKEND - Obtener emails con caché
+    const response = await fetch('http://localhost:3002/api/outlook/emails-with-cache?days=30');
     
     if (!response.ok) {
       throw new Error(`Error HTTP: ${response.status}`);
     }
 
     const data = await response.json();
-    const emails = data.emails || [];
+    const allEmails = data.emails || [];
     
-    console.log(`✅ Paso 1 completado: ${emails.length} emails obtenidos del backend`);
+    console.log(`✅ Paso 1 completado: ${allEmails.length} emails obtenidos (caché + inbox reciente)`);
 
-    if (emails.length === 0) {
+    if (allEmails.length === 0) {
       toast({
         title: "Info",
-        description: "No se encontraron emails en el inbox de Outlook",
+        description: "No se encontraron emails",
       });
       return;
     }
 
     // LOG DETALLADO: Mostrar todos los asuntos para verificar emails de error
     console.log('\n📋 TODOS LOS ASUNTOS DE EMAILS:');
-    emails.forEach((email, i) => {
-      
-
-      
+    allEmails.forEach((email, i) => {
       if (email.Subject) {
         const subject = email.Subject.toLowerCase();
         const isError = subject.includes('undeliverable') ||
@@ -418,7 +367,7 @@ const checkAllReplies = async () => {
       // ========== VERIFICAR EMAILS DE ERROR (BOUNCED) ==========
       console.log(`   🔍 Buscando emails de error...`);
       
-      const errorEmails = emails.filter((email) => {
+      const errorEmails = allEmails.filter((email) => {
         if (!email || !email.Subject) return false;
         
         const subject = email.Subject.toLowerCase();
@@ -480,7 +429,7 @@ const checkAllReplies = async () => {
       }
 
       // ========== VERIFICAR RESPUESTAS NORMALES ==========
-      const replies = emails.filter((email) => {
+      const replies = allEmails.filter((email) => {
         if (!email || !email.SenderEmail) return false;
 
         const senderEmail = (email.SenderEmail || '').toLowerCase().trim();

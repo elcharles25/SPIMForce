@@ -570,10 +570,10 @@ for /f "tokens=5" %%a in ('netstat -aon ^| findstr :3002 ^| findstr LISTENING') 
     taskkill /F /PID %%a >nul 2>&1
 )
 
-REM Matar proceso de Vite (puerto 5173)
-echo Buscando procesos en puerto 5173...
-for /f "tokens=5" %%a in ('netstat -aon ^| findstr :5173 ^| findstr LISTENING') do (
-    echo Matando proceso %%a en puerto 5173
+REM Matar proceso de Vite (puerto 8080)
+echo Buscando procesos en puerto 8080...
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr :8080 ^| findstr LISTENING') do (
+    echo Matando proceso %%a en puerto 8080
     taskkill /F /PID %%a >nul 2>&1
 )
 
