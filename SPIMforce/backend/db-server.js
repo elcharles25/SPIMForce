@@ -1425,6 +1425,7 @@ app.get('/api/opportunities', (req, res) => {
       proposed_solution: row.proposed_solution,
       offer_presented: Boolean(row.offer_presented),
       qualification_initiatives: parseJSONField(row.qualification_initiatives),
+      last_qualification_update: row.last_qualification_update,
       created_at: formatDateTime(row.created_at),
       updated_at: formatDateTime(row.updated_at),
       contact: {
@@ -1466,6 +1467,7 @@ app.get('/api/opportunities/:id', (req, res) => {
       proposed_solution: row.proposed_solution,
       offer_presented: Boolean(row.offer_presented),
       qualification_initiatives: parseJSONField(row.qualification_initiatives),
+      last_qualification_update: row.last_qualification_update,
       created_at: formatDateTime(row.created_at),
       updated_at: formatDateTime(row.updated_at),
       contact: {
@@ -1486,7 +1488,7 @@ app.get('/api/opportunities/:id', (req, res) => {
 app.post('/api/opportunities', (req, res) => {
   try {
     const id = randomUUID();
-    const { contact_id, status, proposed_solution, offer_presented, qualification_initiatives } = req.body;
+    const { contact_id, status, proposed_solution, offer_presented, qualification_initiatives, last_qualification_update } = req.body;
     
     if (!contact_id) {
       return res.status(400).json({ error: 'contact_id es requerido' });
@@ -1494,13 +1496,14 @@ app.post('/api/opportunities', (req, res) => {
     
     db.run(`
       INSERT INTO opportunities (
-        id, contact_id, status, proposed_solution, offer_presented, qualification_initiatives,
+        id, contact_id, status, proposed_solution, offer_presented, qualification_initiatives, last_qualification_update,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
     `, [
       id, contact_id, status || 'open', proposed_solution || null, 
       offer_presented ? 1 : 0,
-      qualification_initiatives ? JSON.stringify(qualification_initiatives) : null
+      qualification_initiatives ? JSON.stringify(qualification_initiatives) : null,
+      last_qualification_update || null,
     ]);
     
     saveDB();
@@ -1522,6 +1525,7 @@ app.post('/api/opportunities', (req, res) => {
       proposed_solution: row.proposed_solution,
       offer_presented: Boolean(row.offer_presented),
       qualification_initiatives: parseJSONField(row.qualification_initiatives),
+      last_qualification_update: row.last_qualification_update,
       created_at: formatDateTime(row.created_at),
       updated_at: formatDateTime(row.updated_at),
       contact: {
@@ -1542,15 +1546,17 @@ app.post('/api/opportunities', (req, res) => {
 app.put('/api/opportunities/:id', (req, res) => {
   try {
     const { id } = req.params;
-    const { contact_id, status, proposed_solution, offer_presented, qualification_initiatives } = req.body;
+    const { contact_id, status, proposed_solution, offer_presented, qualification_initiatives, last_qualification_update } = req.body;
     
     db.run(`
       UPDATE opportunities SET
         contact_id = ?, status = ?, proposed_solution = ?, 
-        offer_presented = ?, qualification_initiatives = ?, updated_at = datetime('now')
+        offer_presented = ?, qualification_initiatives = ?, last_qualification_update = ?, updated_at = datetime('now')
       WHERE id = ?
     `, [contact_id, status, proposed_solution, offer_presented ? 1 : 0, 
-      qualification_initiatives ? JSON.stringify(qualification_initiatives) : null, id]);
+      qualification_initiatives ? JSON.stringify(qualification_initiatives) : null,
+      last_qualification_update || null,
+      id]);
     
     saveDB();
     
@@ -1575,6 +1581,7 @@ app.put('/api/opportunities/:id', (req, res) => {
       proposed_solution: row.proposed_solution,
       offer_presented: Boolean(row.offer_presented),
       qualification_initiatives: parseJSONField(row.qualification_initiatives),
+      last_qualification_update: row.last_qualification_update,
       created_at: formatDateTime(row.created_at),
       updated_at: formatDateTime(row.updated_at),
       contact: {

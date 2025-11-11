@@ -53,6 +53,7 @@ interface Opportunity {
   offer_presented: boolean;
   created_at: string;
   updated_at: string;
+  last_qualification_update: string;
   qualification_initiatives?: Array<{
     title: string;
     challenge: string;
@@ -456,7 +457,7 @@ ${notesContent}`;
       
       if (oppData?.qualification_initiatives) {
         setQualificationInitiatives(oppData.qualification_initiatives);
-        setLastQualificationUpdate(oppData.updated_at);
+        setLastQualificationUpdate(oppData.last_qualification_update);
       }
     } catch (error) {
       console.error('Error cargando datos:', error);
@@ -501,7 +502,8 @@ ${notesContent}`;
           status: opportunity!.status,
           proposed_solution: opportunity!.proposed_solution,
           offer_presented: opportunity!.offer_presented,
-          qualification_initiatives: extractedInitiatives
+          qualification_initiatives: extractedInitiatives,
+          last_qualification_update: new Date().toISOString()
         });
         console.log('💾 Iniciativas guardadas en base de datos');
       } catch (dbError) {
@@ -788,6 +790,8 @@ ${notesContent}`;
       </div>
     );
   }
+
+  const hasInitiatives = (qualificationInitiatives?.length ?? 0) > 0;
 
   return (
     <div className="container mx-auto py-6 px-4">
@@ -1091,7 +1095,7 @@ ${notesContent}`;
                 </h3>
 
                 <div className="flex items-center gap-2">
-                  {lastQualificationUpdate && (
+                  {lastQualificationUpdate && hasInitiatives && (
                     <p className="text-xs italic text-slate-500">
                       Última actualización: {new Date(lastQualificationUpdate).toLocaleDateString('es-ES', {
                         day: 'numeric',
@@ -1100,21 +1104,28 @@ ${notesContent}`;
                       })}
                     </p>
                   )}
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={handleAnalyzeQualification}
-                    disabled={qualificationLoading || meetings.length === 0}
-                    className="hover:bg-indigo-100"
-                  >
-                    {qualificationLoading ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
-                    )}
-                  </Button>
+                  {hasInitiatives && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={handleAnalyzeQualification}
+                      disabled={qualificationLoading || meetings.length === 0}
+                      className="hover:bg-indigo-100"
+                    >
+                      {qualificationLoading ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                          />
+                        </svg>
+                      )}
+                    </Button>
+                  )}
                 </div>
               </div>
 
@@ -1154,9 +1165,16 @@ ${notesContent}`;
                           {initiative.title}
                         </h4>
                         {initiative.date && (
-                          <Badge variant="outline" className="text-xs shrink-0">
-                            {initiative.date}
-                          </Badge>
+                        <Badge
+                          variant="outline"
+                            className={`text-xs shrink-0 ${
+                                initiative.date === "Fecha límite no identificada" ? "border-red-500 text-red-700 dark:text-red-400" :
+                                ""
+                            }`}
+                        >
+                          {initiative?.date ?? "—"}
+                        </Badge>
+
                         )}
                       </div>
                       <p className="text-xs text-slate-600 line-clamp-2">
