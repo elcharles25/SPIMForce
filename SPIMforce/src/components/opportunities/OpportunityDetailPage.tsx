@@ -42,7 +42,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Switch } from '@/components/ui/switch';
-import { ArrowLeft, Plus, Pencil, Trash2, Mail, Phone, Linkedin, Sparkles, TrendingUp, ClipboardList, MessageSquare, Copy, Loader2 } from 'lucide-react';
+import { ArrowLeft, Plus, Pencil, Trash2, Mail, Phone, Linkedin, Sparkles, TrendingUp, ClipboardList, MessageSquare, Copy, Loader2, ImageIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface Opportunity {
@@ -76,6 +76,7 @@ interface Opportunity {
     pa_name: string | null;
     pa_email: string | null;
     pa_phone: string | null;
+    photo_url: string | null;
   };
 }
 
@@ -803,36 +804,80 @@ ${notesContent}`;
         <ArrowLeft className="mr-2 h-4 w-4" />
         Volver a Oportunidades
       </Button>
-
-      <div className="flex justify-between items-start mb-1">
-        <div className="flex items-center gap-10">
-          <h1 className="text-3xl font-bold text-slate-800">
-            Oportunidad: {opportunity.contact.first_name} {opportunity.contact.last_name}
-          </h1>
-          {opportunity.contact.tier && (
-            <span
-              className={`w-20 h-10 rounded-full flex items-center text-white justify-center text-lg font-bold shadow-md ${opportunity.contact.tier === "1" ? "tier-1" :
-                opportunity.contact.tier === "2" ? "tier-2" :
-                  "tier-3"
-                }`}
-            >
-              Tier {opportunity.contact.tier}
-            </span>
-          )}
+      {/* HEADER CON FOTO Y DATOS DEL CONTACTO */}
+      <div className="flex gap-6 mb-1">
+        {/* FOTO DEL CONTACTO */}
+        <div className="h-20 aspect-[6/7] overflow-hidden">
+          <Card className="shadow-sm rounded-2xl h-full">
+            <CardContent className="p-0 h-full">
+              <div
+                className={
+                  `relative w-full h-full overflow-hidden 
+                  ${opportunity.contact.photo_url 
+                      ? 'rounded-2xl'
+                      : `rounded-2xl border-2 border-dashed 
+                        transition-colors hover:border-indigo-400 hover:bg-indigo-50/50 focus:outline-none focus:ring-2 focus:ring-indigo-500`
+                  }`
+                }
+              >
+                {opportunity.contact.photo_url ? (
+                  <>
+                    <img
+                      src={`http://localhost:3001${opportunity.contact.photo_url}?t=${Date.now()}`}
+                      alt={`${opportunity.contact.first_name} ${opportunity.contact.last_name}`}
+                      className="absolute inset-0 w-full h-full object-cover"
+                      key={opportunity.contact.photo_url}
+                    />
+                    <button
+                      type="button"
+                      className="absolute inset-0 w-full h-full"
+                      onClick={() => {}}
+                      aria-label="Actualizar foto"
+                    />
+                  </>
+                ) : (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400">
+                        <ImageIcon className="h-3 w-3" />
+                        <p className="text-xs text-center px-1">
+                          Pega o arrastra una imagen
+                        </p>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
         </div>
-        <Button
-          variant="outline"
-          className="rounded-full shadow-sm hover:shadow-md transition-shadow hover:bg-indigo-100"
-          onClick={openEditDialog}>
-          <Pencil className="mr-2 h-4 w-4" />
-          Editar
-        </Button>
-      </div>
+      <div className="flex-1"> 
+          <div className="flex justify-between items-start mb-1">
+            <div className="flex items-center gap-10">
+              <h1 className="text-3xl font-bold text-slate-800">
+                Oportunidad: {opportunity.contact.first_name} {opportunity.contact.last_name}
+              </h1>
+              {opportunity.contact.tier && (
+                <span
+                  className={`w-20 h-10 rounded-full flex items-center text-white justify-center text-lg font-bold shadow-md ${opportunity.contact.tier === "1" ? "tier-1" :
+                    opportunity.contact.tier === "2" ? "tier-2" :
+                      "tier-3"
+                    }`}
+                >
+                  Tier {opportunity.contact.tier}
+                </span>
+              )}
+            </div>
+            <Button
+              variant="outline"
+              className="rounded-full shadow-sm hover:shadow-md transition-shadow hover:bg-indigo-100"
+              onClick={openEditDialog}>
+              <Pencil className="mr-2 h-4 w-4" />
+              Editar
+            </Button>
+          </div>
 
-      <p className="text-xl text-slate-600 mb-8">
-        {opportunity.contact.title} - {opportunity.contact.organization}
-      </p>
-
+          <p className="text-xl text-slate-600 mb-8">
+            {opportunity.contact.title} - {opportunity.contact.organization}
+          </p>
+        </div>
+    </div>
       <div className="grid grid-cols-12 gap-6 mb-6">
 
         <Card className="border-gray-200 shadow-sm rounded-2xl col-span-4">

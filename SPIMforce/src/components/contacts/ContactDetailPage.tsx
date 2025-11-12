@@ -1064,95 +1064,100 @@ const handleShowMore = () => {
         Volver a Contactos
       </Button>
 
-      {/* HEADER CON TIER Y BADGE */}
-      <div className="flex justify-between items-start mb-1">
-        <div className="flex items-center gap-10">
-          <h1 className="text-3xl font-bold text-slate-800">
-            {contact.first_name} {contact.last_name}
-          </h1>
-          {contact.tier && (
-            <span 
-              className={`w-20 h-10 rounded-full flex items-center text-white justify-center text-lg font-bold shadow-md ${
-                  contact.tier === "1" ? "tier-1" :
-                  contact.tier === "2" ? "tier-2" :
-                  "tier-3"
-              }`}
-            >
-             Tier {contact.tier}
-            </span>
-          )}
+      {/* HEADER CON FOTO Y DATOS DEL CONTACTO */}
+      <div className="flex gap-6 mb-1">
+        {/* FOTO DEL CONTACTO */}
+        <div className="h-20 aspect-[6/7] overflow-hidden">
+          <Card className="shadow-sm rounded-2xl h-full">
+            <CardContent className="p-0 h-full">
+              <div
+                ref={photoDropZoneRef}
+                tabIndex={0}
+                className={
+                  `relative w-full h-full overflow-hidden 
+                  ${contact.photo_url 
+                      ? 'rounded-2xl'
+                      : `rounded-2xl border-2 border-dashed 
+                        ${isDraggingPhoto ? 'border-indigo-500 bg-indigo-50' : 'border-gray-300 bg-gray-50'}
+                        transition-colors cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/50 focus:outline-none focus:ring-2 focus:ring-indigo-500`
+                  }`
+                }
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+              >
+                {contact.photo_url ? (
+                  <>
+                    <img
+                      src={`http://localhost:3001${contact.photo_url}?t=${Date.now()}`}
+                      alt={`${contact.first_name} ${contact.last_name}`}
+                      className="absolute inset-0 w-full h-full object-cover"
+                      key={contact.photo_url}
+                    />
+                    <button
+                      type="button"
+                      className="absolute inset-0 w-full h-full"
+                      onClick={() => {}}
+                      aria-label="Actualizar foto"
+                    />
+                  </>
+                ) : (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400">
+                    {uploadingPhoto ? (
+                      <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+                    ) : (
+                      <>
+                        <ImageIcon className="h-3 w-3" />
+                        <p className="text-xs text-center px-1">
+                          Pega o arrastra una imagen
+                        </p>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
         </div>
-        <Button 
-            variant="outline"
-            onClick={openEditDialog}
-            className="rounded-full px-6 shadow-sm hover:shadow-md transition-shadow">
-          <Pencil className="mr-2 h-4 w-4" />
-          Editar
-        </Button>
+
+        {/* INFORMACIÓN PRINCIPAL DEL CONTACTO */}
+        <div className="flex-1">
+          <div className="flex justify-between items-start mb-1">
+            <div className="flex items-center gap-10">
+              <h1 className="text-3xl font-bold text-slate-800">
+                {contact.first_name} {contact.last_name}
+              </h1>
+              {contact.tier && (
+                <span 
+                  className={`w-20 h-10 rounded-full flex items-center text-white justify-center text-lg font-bold shadow-md ${
+                      contact.tier === "1" ? "tier-1" :
+                      contact.tier === "2" ? "tier-2" :
+                      "tier-3"
+                  }`}
+                >
+                 Tier {contact.tier}
+                </span>
+              )}
+            </div>
+            <Button 
+                variant="outline"
+                onClick={openEditDialog}
+                className="rounded-full px-6 shadow-sm hover:shadow-md transition-shadow">
+              <Pencil className="mr-2 h-4 w-4" />
+              Editar
+            </Button>
+          </div>
+
+          <p className="text-xl text-slate-600 mb-6">
+            {contact.title} - {contact.organization}
+          </p>
+        </div>
       </div>
-
-      <p className="text-xl text-slate-600 mb-8">
-        {contact.title} - {contact.organization}
-      </p>
-
       {/* SECCIÓN SUPERIOR CONDENSADA */}
       <div className="grid grid-cols-12 gap-6 mb-6">
         
-        {/* FOTO DEL CONTACTO - 2 columnas */}
-        <Card className="shadow-sm rounded-2xl col-span-2 h-full">
-          <CardContent className="p-0 h-full">
-            <div
-              ref={photoDropZoneRef}
-              tabIndex={0}
-              className={
-                `relative w-full h-full overflow-hidden 
-                ${contact.photo_url 
-                    ? 'rounded-2xl' // cuando hay foto, sin borde de dropzone
-                    : `rounded-2xl border-2 border-dashed 
-                      ${isDraggingPhoto ? 'border-indigo-500 bg-indigo-50' : 'border-gray-300 bg-gray-50'}
-                      transition-colors cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/50 focus:outline-none focus:ring-2 focus:ring-indigo-500`
-                }`
-              }
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-            >
-              {contact.photo_url ? (
-                <>
-                  <img
-                    src={`http://localhost:3001${contact.photo_url}?t=${Date.now()}`}
-                    alt={`${contact.first_name} ${contact.last_name}`}
-                    className="absolute inset-0 w-full h-full object-cover"
-                    key={contact.photo_url}
-                  />
-                  {/* Si quieres que siga siendo clickable como dropzone para actualizar: */}
-                  <button
-                    type="button"
-                    className="absolute inset-0 w-full h-full"
-                    onClick={() => {/* abrir file dialog o lógica para actualizar */}}
-                    aria-label="Actualizar foto"
-                  />
-                </>
-              ) : (
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400">
-                  {uploadingPhoto ? (
-                    <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
-                  ) : (
-                    <>
-                      <ImageIcon className="h-12 w-12 mb-2" />
-                      <p className="text-xs text-center px-2">
-                        Pega o arrastra una imagen
-                      </p>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
         {/* INFORMACIÓN DE CONTACTO - 4 columnas */}
-        <Card className="border-gray-200 shadow-sm rounded-2xl col-span-3">
+        <Card className="border-gray-200 shadow-sm rounded-2xl col-span-4">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-lg font-semibold text-slate-800">Información de Contacto</CardTitle>
@@ -1243,7 +1248,7 @@ const handleShowMore = () => {
         </Card>
 
       {/* NOTAS DEL CLIENTE - 3 columnas */}
-      <Card className={`${contact.notes || isEditingNotes ? 'col-span-4' : 'col-span-4'} bg-gradient-to-br from-amber-50 to-amber-100/50 border-amber-200 shadow-sm rounded-2xl`}>
+      <Card className={`${contact.notes || isEditingNotes ? 'col-span-5' : 'col-span-5'} bg-gradient-to-br from-amber-50 to-amber-100/50 border-amber-200 shadow-sm rounded-2xl`}>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="text-lg font-semibold text-slate-800">Notas sobre el cliente</CardTitle>
