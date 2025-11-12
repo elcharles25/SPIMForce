@@ -27,10 +27,19 @@ export class DatabaseAdapter {
   }
 
   async updateContact(id: string, contact: any) {
+    // IMPORTANTE: Primero obtener el contacto actual para preservar photo_url
+    const currentContact = await this.getContact(id);
+    
+    // Merge de los datos, preservando photo_url si no se proporciona
+    const updatedData = {
+      ...contact,
+      photo_url: contact.photo_url !== undefined ? contact.photo_url : currentContact.photo_url
+    };
+
     const res = await fetch(`${API_URL}/api/contacts/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(contact)
+      body: JSON.stringify(updatedData)
     });
     if (!res.ok) throw new Error('Error actualizando contacto');
     return res.json();

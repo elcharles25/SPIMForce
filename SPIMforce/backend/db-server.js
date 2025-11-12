@@ -29,6 +29,13 @@ if (!fs.existsSync(webinarsDir)) {
   console.log('📁 Directorio de webinars creado:', webinarsDir);
 }
 
+// Crear directorio para fotos de contactos
+const contactPhotosDir = path.join(__dirname, '..', 'runtime', 'contact-photos');
+if (!fs.existsSync(contactPhotosDir)) {
+  fs.mkdirSync(contactPhotosDir, { recursive: true });
+  console.log('📁 Directorio de fotos de contactos creado:', contactPhotosDir);
+}
+
 // Configurar multer para webinars
 const webinarStorage = multer.diskStorage({
   destination: webinarsDir,
@@ -51,6 +58,26 @@ const uploadWebinar = multer({
   }
 });
 
+// Configurar multer para fotos de contactos
+const contactPhotoStorage = multer.diskStorage({
+  destination: contactPhotosDir,
+  filename: (req, file, cb) => {
+    const uniqueName = `${Date.now()}-${file.originalname}`;
+    cb(null, uniqueName);
+  }
+});
+
+const uploadContactPhoto = multer({ 
+  storage: contactPhotoStorage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB límite
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Solo se permiten archivos de imagen'));
+    }
+  }
+});
 
 // Crear directorio para adjuntos
 const attachmentsDir = path.join(__dirname, '..', 'runtime', 'attachments');
@@ -178,9 +205,9 @@ app.post('/api/contacts', (req, res) => {
       INSERT INTO contacts (
         id, first_name, last_name, email, phone, organization, title, gartner_role,
         contact_type, tier, linkedin_url, pa_name, pa_email, pa_phone, webinar_role,
-        contacted, last_contact_date, interested, webinars_subscribed, notes, csm_name, csm_email, ep_name, ep_email, last_email_check, ai_initiatives,
+        contacted, last_contact_date, interested, webinars_subscribed, notes, csm_name, csm_email, ep_name, ep_email, last_email_check, ai_initiatives, photo_url,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? , ?, datetime('now'), datetime('now'))
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
     `, [
       id, 
       req.body.first_name, 
@@ -207,7 +234,8 @@ app.post('/api/contacts', (req, res) => {
       req.body.ep_name || null, 
       req.body.ep_email || null, 
       req.body.last_email_check || null,
-      req.body.ai_initiatives || null
+      req.body.ai_initiatives || null,
+      req.body.photo_url || null
     ]);
     saveDB();
     const result = db.exec('SELECT * FROM contacts WHERE id = ?', [id]);
@@ -225,7 +253,7 @@ app.put('/api/contacts/:id', (req, res) => {
         first_name = ?, last_name = ?, email = ?, phone = ?, organization = ?, title = ?, gartner_role = ?,
         contact_type = ?, tier = ?, linkedin_url = ?, pa_name = ?, pa_email = ?, pa_phone = ?, webinar_role = ?,
         contacted = ?, last_contact_date = ?, interested = ?, webinars_subscribed = ?,
-        csm_name = ?, csm_email = ?, ep_name = ?, ep_email = ?, last_email_check = ?, notes = ?, ai_initiatives = ?,
+        csm_name = ?, csm_email = ?, ep_name = ?, ep_email = ?, last_email_check = ?, notes = ?, ai_initiatives = ?, photo_url = ?,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `, [
@@ -254,6 +282,7 @@ app.put('/api/contacts/:id', (req, res) => {
         req.body.last_email_check || null,
         req.body.notes || null,
         req.body.ai_initiatives || null,
+        req.body.photo_url || null,
         req.params.id
     ]);
     saveDB();
@@ -292,6 +321,142 @@ app.get('/api/contacts/search/:query', (req, res) => {
     res.json(rowsToObjects(result));
   } catch (error) {
     console.error('Error buscando contactos:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Endpoint para subir foto de contacto
+app.post('/api/contacts/:id/photo', uploadContactPhoto.single('photo'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    if (!req.file) {
+      return res.status(400).json({ error: 'No se proporcionó archivo' });
+    }
+
+    console.log('📸 Subiendo foto de contacto...');
+    console.log('   Contact ID:', id);
+    console.log('   Archivo:', req.file.filename);
+    console.log('   Tamaño:', req.file.size, 'bytes');
+
+    const photoUrl = `/contact-photos/${req.file.filename}`;
+    
+    // Actualizar el contacto con la nueva URL de foto
+    db.run('UPDATE contacts SET photo_url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [photoUrl, id]);
+    saveDB();
+    
+    res.json({
+      success: true,
+      photo_url: photoUrl,
+      filename: req.file.filename
+    });
+  } catch (error) {
+    console.error('❌ Error subiendo foto:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Endpoint para subir foto desde base64 (para pegar desde clipboard)
+app.post('/api/contacts/:id/photo-base64', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { base64Data } = req.body;
+    
+    if (!base64Data) {
+      return res.status(400).json({ error: 'No se proporcionó imagen' });
+    }
+
+    console.log('📸 Guardando foto de contacto desde base64...');
+    console.log('   Contact ID:', id);
+
+    // Obtener foto antigua para eliminarla
+    const result = db.exec('SELECT photo_url FROM contacts WHERE id = ?', [id]);
+    const currentContact = rowToObject(result);
+    
+    if (currentContact && currentContact.photo_url) {
+      const oldFilename = currentContact.photo_url.split('/').pop();
+      const oldFilepath = path.join(contactPhotosDir, oldFilename);
+      
+      if (fs.existsSync(oldFilepath)) {
+        fs.unlinkSync(oldFilepath);
+        console.log('   🗑️ Foto antigua eliminada:', oldFilename);
+      }
+    }
+
+    // Extraer el tipo de imagen y los datos
+    const matches = base64Data.match(/^data:image\/(\w+);base64,(.+)$/);
+    if (!matches) {
+      return res.status(400).json({ error: 'Formato de imagen inválido' });
+    }
+
+    const imageType = matches[1];
+    const imageData = matches[2];
+    const buffer = Buffer.from(imageData, 'base64');
+    
+    // Generar nombre único
+    const filename = `${id}-${Date.now()}.${imageType}`;
+    const filepath = path.join(contactPhotosDir, filename);
+    
+    // Guardar archivo
+    fs.writeFileSync(filepath, buffer);
+    
+    console.log('   ✅ Archivo guardado:', filename);
+    console.log('   📏 Tamaño:', buffer.length, 'bytes');
+
+    const photoUrl = `/contact-photos/${filename}`;
+    
+    // Actualizar el contacto con la nueva URL de foto
+    db.run('UPDATE contacts SET photo_url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [photoUrl, id]);
+    saveDB();
+    
+    console.log('   💾 Base de datos actualizada con photo_url:', photoUrl);
+    
+    // Verificar que se guardó correctamente
+    const verifyResult = db.exec('SELECT photo_url FROM contacts WHERE id = ?', [id]);
+    const verifiedContact = rowToObject(verifyResult);
+    console.log('   🔍 Verificación - photo_url en BD:', verifiedContact?.photo_url);
+    
+    res.json({
+      success: true,
+      photo_url: photoUrl,
+      filename: filename
+    });
+  } catch (error) {
+    console.error('❌ Error guardando foto:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Servir fotos de contactos
+app.use('/contact-photos', express.static(contactPhotosDir));
+
+// Eliminar foto de contacto
+app.delete('/api/contacts/:id/photo', (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Obtener la URL actual de la foto
+    const result = db.exec('SELECT photo_url FROM contacts WHERE id = ?', [id]);
+    const row = rowToObject(result);
+    
+    if (row && row.photo_url) {
+      const filename = row.photo_url.split('/').pop();
+      const filepath = path.join(contactPhotosDir, filename);
+      
+      // Eliminar archivo si existe
+      if (fs.existsSync(filepath)) {
+        fs.unlinkSync(filepath);
+        console.log('🗑️ Foto eliminada:', filename);
+      }
+    }
+    
+    // Actualizar contacto para quitar la URL
+    db.run('UPDATE contacts SET photo_url = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [id]);
+    saveDB();
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('❌ Error eliminando foto:', error);
     res.status(500).json({ error: error.message });
   }
 });

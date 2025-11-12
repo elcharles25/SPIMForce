@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { db } from '@/lib/db-adapter';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { formatDateTime, formatDateES } from "@/utils/dateFormatter";
-import { Sparkles, TrendingUp, ClipboardList, MessageSquare, Copy, Loader2, RefreshCw, Medal } from 'lucide-react';
+import { Sparkles, TrendingUp, ClipboardList, MessageSquare, Copy, Loader2, RefreshCw, Medal, Upload, X, Image as ImageIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import "@/app.css";
 import {
@@ -67,6 +67,7 @@ interface Contact {
   ep_email?: string | null;
   last_email_check?: string | null;
   ai_initiatives?: string | null;
+  photo_url?: string | null;
 }
 
 interface Meeting {
@@ -198,6 +199,7 @@ export default function ContactDetailPage() {
   const navigate = useNavigate();
   const { id } = useParams();
   const { toast } = useToast();
+  const photoDropZoneRef = useRef<HTMLDivElement>(null);
 
   const [isImportingEmails, setIsImportingEmails] = useState(false);
   const [showOnlyMeetings, setShowOnlyMeetings] = useState(false);
@@ -218,6 +220,8 @@ export default function ContactDetailPage() {
   const [visibleCount, setVisibleCount] = useState(10);
   const [isEditingNotes, setIsEditingNotes] = useState(false);
   const [notesContent, setNotesContent] = useState('');
+  const [isDraggingPhoto, setIsDraggingPhoto] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   const [initiatives, setInitiatives] = useState<Array<{
     title: string;
@@ -402,6 +406,142 @@ const PROMPT_ANALISIS_INICIATIVAS = `Analiza este historial de interacciones de 
         }
       }
     }, [contact]);
+
+    // Configurar paste event para la zona de foto
+    useEffect(() => {
+      const handlePaste = async (e: ClipboardEvent) => {
+        if (!photoDropZoneRef.current || !contact) return;
+        
+        const items = e.clipboardData?.items;
+        if (!items) return;
+
+        for (let i = 0; i < items.length; i++) {
+          if (items[i].type.indexOf('image') !== -1) {
+            e.preventDefault();
+            const blob = items[i].getAsFile();
+            if (blob) {
+              await handlePhotoUpload(blob);
+            }
+            break;
+          }
+        }
+      };
+
+      if (photoDropZoneRef.current) {
+        photoDropZoneRef.current.addEventListener('paste', handlePaste as any);
+      }
+
+      return () => {
+        if (photoDropZoneRef.current) {
+          photoDropZoneRef.current.removeEventListener('paste', handlePaste as any);
+        }
+      };
+    }, [contact]);
+
+const handlePhotoUpload = async (file: File) => {
+  if (!contact) return;
+  
+  setUploadingPhoto(true);
+  try {
+    // Convertir a base64
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      const base64Data = reader.result as string;
+      
+      try {
+        const response = await fetch(`http://localhost:3001/api/contacts/${contact.id}/photo-base64`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ base64Data })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          // Recargar el contacto completo desde la BD para asegurar sincronización
+          const updatedContact = await db.getContact(contact.id);
+          setContact(updatedContact);
+          
+          toast({
+            title: 'Foto actualizada',
+            description: 'La foto del contacto se ha guardado correctamente',
+          });
+        } else {
+          throw new Error(data.error || 'Error desconocido');
+        }
+      } catch (error) {
+        console.error('Error subiendo foto:', error);
+        toast({
+          title: 'Error',
+          description: error instanceof Error ? error.message : 'Error al guardar la foto',
+          variant: 'destructive',
+        });
+      } finally {
+        setUploadingPhoto(false);
+      }
+    };
+    
+    reader.readAsDataURL(file);
+  } catch (error) {
+    console.error('Error procesando imagen:', error);
+    toast({
+      title: 'Error',
+      description: 'Error al procesar la imagen',
+      variant: 'destructive',
+    });
+    setUploadingPhoto(false);
+  }
+};
+
+const handleDeletePhoto = async () => {
+  if (!contact) return;
+  
+  try {
+    const response = await fetch(`http://localhost:3001/api/contacts/${contact.id}/photo`, {
+      method: 'DELETE'
+    });
+
+    const data = await response.json();
+
+    if (data.success) {
+      // Recargar el contacto completo desde la BD
+      const updatedContact = await db.getContact(contact.id);
+      setContact(updatedContact);
+      
+      toast({
+        title: 'Foto eliminada',
+        description: 'La foto del contacto se ha eliminado correctamente',
+      });
+    }
+  } catch (error) {
+    console.error('Error eliminando foto:', error);
+    toast({
+      title: 'Error',
+      description: 'Error al eliminar la foto',
+      variant: 'destructive',
+    });
+  }
+};
+
+const handleDragOver = (e: React.DragEvent) => {
+  e.preventDefault();
+  setIsDraggingPhoto(true);
+};
+
+const handleDragLeave = (e: React.DragEvent) => {
+  e.preventDefault();
+  setIsDraggingPhoto(false);
+};
+
+const handleDrop = async (e: React.DragEvent) => {
+  e.preventDefault();
+  setIsDraggingPhoto(false);
+  
+  const files = e.dataTransfer.files;
+  if (files.length > 0 && files[0].type.startsWith('image/')) {
+    await handlePhotoUpload(files[0]);
+  }
+};
 
 const handleAnalyzeValue = async () => {
   if (meetings.length === 0) {
@@ -597,7 +737,7 @@ const loadData = async () => {
       // Terminar el loading para que se muestren los datos
       setLoading(false);
       
-      // Ahora, con los datos ya cargados y mostrados, importar emails
+      // Ahora, con los datos ya cargados y mostrados, importar emails en background
       if (contactData) {
         try {
           const response = await fetch('http://localhost:3002/api/contacts/import-received-emails', {
@@ -613,7 +753,8 @@ const loadData = async () => {
           const data = await response.json();
 
           if (data.success && data.importedCount > 0) {
-            // Solo recargar las reuniones si se importaron emails nuevos
+            // IMPORTANTE: Solo recargar las reuniones, NO el contacto
+            // Esto evita sobrescribir cambios recientes (como fotos)
             const updatedMeetings = await db.getMeetingsByContact(id!);
             setMeetings(updatedMeetings);
           }
@@ -626,7 +767,6 @@ const loadData = async () => {
       setLoading(false);
     }
   };
-
 const handleImportEmails = async () => {
   if (!contact) return;
   
@@ -958,8 +1098,61 @@ const handleShowMore = () => {
       {/* SECCIÓN SUPERIOR CONDENSADA */}
       <div className="grid grid-cols-12 gap-6 mb-6">
         
+        {/* FOTO DEL CONTACTO - 2 columnas */}
+        <Card className="shadow-sm rounded-2xl col-span-2 h-full">
+          <CardContent className="p-0 h-full">
+            <div
+              ref={photoDropZoneRef}
+              tabIndex={0}
+              className={
+                `relative w-full h-full overflow-hidden 
+                ${contact.photo_url 
+                    ? 'rounded-2xl' // cuando hay foto, sin borde de dropzone
+                    : `rounded-2xl border-2 border-dashed 
+                      ${isDraggingPhoto ? 'border-indigo-500 bg-indigo-50' : 'border-gray-300 bg-gray-50'}
+                      transition-colors cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/50 focus:outline-none focus:ring-2 focus:ring-indigo-500`
+                }`
+              }
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+            >
+              {contact.photo_url ? (
+                <>
+                  <img
+                    src={`http://localhost:3001${contact.photo_url}?t=${Date.now()}`}
+                    alt={`${contact.first_name} ${contact.last_name}`}
+                    className="absolute inset-0 w-full h-full object-cover"
+                    key={contact.photo_url}
+                  />
+                  {/* Si quieres que siga siendo clickable como dropzone para actualizar: */}
+                  <button
+                    type="button"
+                    className="absolute inset-0 w-full h-full"
+                    onClick={() => {/* abrir file dialog o lógica para actualizar */}}
+                    aria-label="Actualizar foto"
+                  />
+                </>
+              ) : (
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400">
+                  {uploadingPhoto ? (
+                    <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+                  ) : (
+                    <>
+                      <ImageIcon className="h-12 w-12 mb-2" />
+                      <p className="text-xs text-center px-2">
+                        Pega o arrastra una imagen
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
         {/* INFORMACIÓN DE CONTACTO - 4 columnas */}
-        <Card className="border-gray-200 shadow-sm rounded-2xl col-span-4">
+        <Card className="border-gray-200 shadow-sm rounded-2xl col-span-3">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-lg font-semibold text-slate-800">Información de Contacto</CardTitle>
@@ -1049,8 +1242,8 @@ const handleShowMore = () => {
           </CardContent>
         </Card>
 
-      {/* NOTAS DEL CLIENTE - 5 columnas */}
-      <Card className={`${contact.notes || isEditingNotes ? 'col-span-5' : 'col-span-5'} bg-gradient-to-br from-amber-50 to-amber-100/50 border-amber-200 shadow-sm rounded-2xl`}>
+      {/* NOTAS DEL CLIENTE - 3 columnas */}
+      <Card className={`${contact.notes || isEditingNotes ? 'col-span-4' : 'col-span-4'} bg-gradient-to-br from-amber-50 to-amber-100/50 border-amber-200 shadow-sm rounded-2xl`}>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="text-lg font-semibold text-slate-800">Notas sobre el cliente</CardTitle>

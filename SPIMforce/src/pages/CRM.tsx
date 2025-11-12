@@ -90,7 +90,10 @@ const CRM = () => {
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [campaignTypes, setCampaignTypes] = useState<string[]>([]);
   const [isImporting, setIsImporting] = useState(false);
-  const [sortConfig, setSortConfig] = useState<{ key: string; direction: "asc" | "desc" } | null>(null);
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: "asc" | "desc" } | null>({
+  key: "organization",
+  direction: "asc",
+  });
   const [filters, setFilters] = useState({
     search: "",
     organization: "",
