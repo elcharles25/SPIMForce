@@ -321,6 +321,7 @@ const [formData, setFormData] = useState({
             3. Estructura de la respuesta:
               - Presenta la información de forma clara y detallada, utilizando listas ordenadas y viñetas.
               - Si es posible, incluye citas textuales relevantes del fichero para respaldar el análisis.
+              - Ordena las inciativas por orden de mención, siendo la primera de la lista la última que haya sido mencionada en el fichero adjunto, en orden descendente. 
               - Devuelve SOLO JSON (sin markdown):
                 {
                   "initiatives": [
@@ -356,7 +357,7 @@ const PROMPT_ANALISIS_INICIATIVAS = `Analiza este historial de interacciones de 
     - No iniciativas sobre inscripción a eventos como Symposium o Summit
     - NO emails informativos sin iniciativa específica
     - Máximo 6 iniciativas, si hay menos, las que sean
-    - Ordenadas por prioridad
+    - Ordena las inciativas por orden de mención, siendo la primera de la lista la última que haya sido mencionada en el fichero adjunto, en orden descendente. 
     - Las iniciativas deben estar en español
 
     Para cada iniciativa:
@@ -478,18 +479,14 @@ const handleAnalyzeInitiatives = async () => {
     const parsed = JSON.parse(jsonMatch[0]);
     const extractedInitiatives = parsed.initiatives || [];
     
-    const sortedInitiatives = extractedInitiatives.sort((a: any, b: any) => 
-      new Date(b.date).getTime() - new Date(a.date).getTime()
-    );
-    
-    setInitiatives(sortedInitiatives);
+    setInitiatives(extractedInitiatives);
     setLastInitiativesUpdate(new Date().toISOString());
     
     if (contact) {
       const updatedContact = {
         ...contact,
         ai_initiatives: JSON.stringify({
-          initiatives: sortedInitiatives,
+          initiatives: extractedInitiatives,
           lastUpdate: new Date().toISOString()
         })
       };
@@ -498,7 +495,7 @@ const handleAnalyzeInitiatives = async () => {
     
     toast({
       title: 'Análisis completado',
-      description: `Se encontraron ${sortedInitiatives.length} iniciativa(s)`,
+      description: `Se encontraron ${extractedInitiatives.length} iniciativa(s)`,
     });
   } catch (error) {
     console.error('Error analizando iniciativas:', error);
@@ -916,7 +913,6 @@ const handleShowMore = () => {
   setVisibleCount(filteredMeetings.length);
 };
 
-
   return (
     <div className="container mx-auto py-6 px-4">
       <Button
@@ -1258,6 +1254,7 @@ const handleShowMore = () => {
                       Última actualización: {formatDateES(lastInitiativesUpdate)}
                     </p>
                   )}
+                  {lastInitiativesUpdate && (
                   <Button
                     size="sm"
                     variant="ghost"
@@ -1271,6 +1268,7 @@ const handleShowMore = () => {
                       <RefreshCw className="h-4 w-4" />
                     )}
                   </Button>
+                  )}
                 </div>
               </div>
               
