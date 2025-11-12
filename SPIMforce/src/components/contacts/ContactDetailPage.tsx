@@ -968,11 +968,16 @@ const handleShowMore = () => {
                   contact.contact_type === "Cliente" || contact.contact_type === "Cliente proxy"
                     ? "bg-green-500 hover:bg-green-600"
                     : contact.contact_type === "Oportunidad"
-                    ? "bg-blue-500 hover:bg-blue-600"
+                    ? "bg-blue-500 hover:bg-blue-600 cursor-pointer"
                     : contact.contact_type === "Prospect"
                     ? "bg-amber-500 hover:bg-amber-600"
                     : "bg-slate-500 hover:bg-slate-600"
                 }`}
+                onClick={() => {
+                  if (contact.contact_type === "Oportunidad" && opportunities.length > 0) {
+                    navigate(`/opportunities/${opportunities[0].id}`);
+                  }
+                }}
               >
                 {contact.contact_type}
               </Badge>

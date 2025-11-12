@@ -521,44 +521,55 @@ export default function OpportunitiesPage() {
                 <TableHead className="text-center">Reuniones</TableHead>
               </TableRow>
             </TableHeader>
-            <TableBody>
-              {opportunities.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="p-8 text-center text-muted-foreground">
-                    No hay oportunidades registradas
-                  </TableCell>
-                </TableRow>
-              ) : (
-                opportunities.map((opportunity) => (
-                  <TableRow key={opportunity.id} 
-                    className="cursor-pointer hover:bg-muted/50 text-sm text-center align-middle"
-                    onClick={() => navigate(`/opportunities/${opportunity.id}`)}>
-                    <TableCell>{opportunity.contact.organization}</TableCell>
-                    <TableCell>
-                      {opportunity.contact.first_name} {opportunity.contact.last_name}
-                    </TableCell>
-                    <TableCell>{opportunity.contact.title}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline">
-                        {getStatusLabel(opportunity.status)}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {opportunity.offer_presented ? (
-                        <span className="text-green-600">✓ Sí</span>
-                      ) : (
-                        <span className="text-muted-foreground">No</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="secondary">
-                        {meetingCounts[opportunity.id] || 0}
-                      </Badge>
+              <TableBody>
+                {opportunities.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="p-8 text-center text-muted-foreground">
+                      No hay oportunidades registradas
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
+                ) : (
+                  [...opportunities]
+                    .sort((a, b) =>
+                      (a?.contact?.organization ?? '').localeCompare(
+                        b?.contact?.organization ?? '',
+                        'es',                    // Usa reglas de español (tildes, ñ)
+                        { sensitivity: 'base' }  // Ignora mayúsculas/minúsculas y acentos
+                      )
+                    )
+                    .map((opportunity) => (
+                      <TableRow
+                        key={opportunity.id}
+                        className="cursor-pointer hover:bg-muted/50 text-sm text-center align-middle"
+                        onClick={() => navigate(`/opportunities/${opportunity.id}`)}
+                      >
+                        <TableCell>{opportunity?.contact?.organization ?? '—'}</TableCell>
+                        <TableCell className="font-bold">
+                          {opportunity?.contact?.first_name} {opportunity?.contact?.last_name}
+                        </TableCell>
+                        <TableCell>{opportunity?.contact?.title}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline">
+                            {getStatusLabel(opportunity.status)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {opportunity.offer_presented ? (
+                            <span className="text-green-600">✓ Sí</span>
+                          ) : (
+                            <span className="text-muted-foreground">No</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary">
+                            {meetingCounts[opportunity.id] || 0}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                )}
+              </TableBody>
+
           </Table>
         </div>
       </div>
