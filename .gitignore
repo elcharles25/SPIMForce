@@ -81,3 +81,6 @@ coverage/
 # Archivos de prueba temporales
 *.test.local.*
 *.spec.local.*
+
+#Elentron
+electron-build/
