@@ -1,5 +1,4 @@
-import { useEffect, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/db-adapter';
 
@@ -24,10 +23,21 @@ interface Campaign {
   };
 }
 
-export function useAutoCampaignSender() {
+const LAST_RUN_KEY = 'autoCampaignLastRun';
+const ONE_HOUR_MS = 60 * 60 * 1000;
+
+/**
+ * Hook que intenta enviar campañas en segundo plano.
+ * - Se ejecuta a intervalos regulares (ej. cada 5 minutos).
+ * - Respeta un throttle de 1 hora entre ejecuciones "reales".
+ * - Evita solapamientos en la misma pestaña y entre pestañas.
+ *
+ * @param intervalMs Cada cuánto intentar ejecutar (no garantiza ejecución, respeta throttle). Default: 5min.
+ */
+export function useAutoCampaignSender(intervalMs: number = 5 * 60 * 1000) {
   const { toast } = useToast();
-  const location = useLocation();
   const [isSending, setIsSending] = useState(false);
+  const runningRef = useRef(false); // barrera adicional de re-entrada
 
   const sendEmail = async (campaign: Campaign, emailNumber: number) => {
     try {
@@ -42,9 +52,8 @@ export function useAutoCampaignSender() {
       const signatureSetting = await db.getSetting("email_signature");
       let signature = '';
       if (signatureSetting?.value) {
-        const value = signatureSetting.value;
-        signature = value?.signature || "";
-        signature = signature.trim();
+        const value = signatureSetting.value as any;
+        signature = (value?.signature || "").trim();
         if (signature.startsWith('"') && signature.endsWith('"')) {
           signature = signature.slice(1, -1);
         }
@@ -52,7 +61,6 @@ export function useAutoCampaignSender() {
       }
 
       const template = await db.getTemplate(campaign.template_id);
-
       if (!template) {
         console.error('Template no encontrado. ID:', campaign.template_id);
         throw new Error('Template not found');
@@ -73,24 +81,21 @@ export function useAutoCampaignSender() {
       body = body.replace(/{{compania}}/g, campaign.contacts.organization || '');
       body = body.replace(/{{ano}}/g, currentYear);
       body = body.replace(/{{anoSiguiente}}/g, nextYear);
-      
+
       if (signature) {
         body = body + '<br/><br/>' + signature;
       }
 
       const attachmentsFromTemplate = template[`email_${emailNumber}_attachments`] || [];
-      const processedAttachments = [];
-      
+      const processedAttachments: { filename: string; content: string }[] = [];
+
       for (const attachment of attachmentsFromTemplate) {
         try {
           if (attachment.url) {
             const response = await fetch(attachment.url);
-            if (!response.ok) {
-              throw new Error(`Error descargando archivo: ${response.status}`);
-            }
-            
+            if (!response.ok) throw new Error(`Error descargando archivo: ${response.status}`);
             const blob = await response.blob();
-            
+
             const base64 = await new Promise<string>((resolve, reject) => {
               const reader = new FileReader();
               reader.readAsDataURL(blob);
@@ -101,11 +106,8 @@ export function useAutoCampaignSender() {
               };
               reader.onerror = reject;
             });
-            
-            processedAttachments.push({
-              filename: attachment.name,
-              content: base64
-            });
+
+            processedAttachments.push({ filename: attachment.name, content: base64 });
           }
         } catch (error) {
           console.error(`Error procesando adjunto ${attachment.name}:`, error);
@@ -115,7 +117,7 @@ export function useAutoCampaignSender() {
       await fetch('http://localhost:3002/api/draft-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           to: campaign.contacts.email,
           contactEmail: campaign.contacts.email,
           subject,
@@ -133,18 +135,34 @@ export function useAutoCampaignSender() {
   };
 
   const autoSendDailyEmails = async () => {
-    if (isSending) {
+    // Evita solapamientos en esta pestaña
+    if (isSending || runningRef.current) {
       console.log('Ya hay un envío en curso, saltando...');
       return;
     }
 
+    // Throttle por hora entre pestañas
+    const now = Date.now();
+    const lastRunRaw = localStorage.getItem(LAST_RUN_KEY);
+    const lastRun = lastRunRaw ? Number(lastRunRaw) : 0;
+    if (lastRun && now - lastRun < ONE_HOUR_MS) {
+      const mins = Math.ceil((ONE_HOUR_MS - (now - lastRun)) / 60000);
+      console.log(`Throttle activo. Próximo intento en ~${mins} min.`);
+      return;
+    }
+
+    // Bloqueo optimista entre pestañas (marca inicio)
+    localStorage.setItem(LAST_RUN_KEY, String(now));
+
+    runningRef.current = true;
+    setIsSending(true);
+
     try {
-      setIsSending(true);
-      console.log('Verificando emails para enviar...');
-      
+      console.log('Verificando emails para enviar (interval)...');
+
       const campaigns: Campaign[] = await db.getCampaigns();
       const today = new Date();
-      const localDate = today.toLocaleDateString('en-CA');
+      const localDate = today.toLocaleDateString('en-CA'); // YYYY-MM-DD
       let emailsSent = 0;
 
       for (const campaign of campaigns) {
@@ -152,26 +170,21 @@ export function useAutoCampaignSender() {
 
         for (let i = 1; i <= 5; i++) {
           const dateField = `email_${i}_date` as keyof Campaign;
-          const emailDate = campaign[dateField];
+          const emailDate = campaign[dateField] as string | null;
           const emailDateOnly = emailDate ? String(emailDate).split('T')[0] : null;
 
           if (emailDateOnly && emailDateOnly <= localDate && campaign.emails_sent < i) {
             console.log(`Auto-enviando email ${i} para campaña ${campaign.id}`);
-            console.log(`Fecha original: ${emailDateOnly}, Fecha actual: ${localDate}`);
-            console.log(`Emails enviados antes: ${campaign.emails_sent}`);
-            
             await sendEmail(campaign, i);
             emailsSent++;
-            
+
             if (emailDateOnly < localDate) {
-              console.log(`Email ${i} estaba atrasado, actualizando fechas...`);
-              
-              const updatedDates: any = {};
+              const updatedDates: Record<string, string> = {};
               updatedDates[`email_${i}_date`] = localDate;
-              
+
               const baseDate = new Date(localDate);
               baseDate.setHours(0, 0, 0, 0);
-              
+
               for (let j = i + 1; j <= 5; j++) {
                 baseDate.setDate(baseDate.getDate() + 3);
                 const year = baseDate.getFullYear();
@@ -179,11 +192,12 @@ export function useAutoCampaignSender() {
                 const day = String(baseDate.getDate()).padStart(2, '0');
                 updatedDates[`email_${j}_date`] = `${year}-${month}-${day}`;
               }
-              
+
               console.log('Fechas actualizadas:', updatedDates);
               await db.updateCampaign(campaign.id, updatedDates);
             }
-            
+
+            // Solo un envío por campaña en cada ciclo
             break;
           }
         }
@@ -193,22 +207,53 @@ export function useAutoCampaignSender() {
         window.dispatchEvent(new CustomEvent('campaignsUpdated'));
         console.log(`✅ ${emailsSent} email(s) enviado(s), evento disparado`);
       } else {
-        console.log(`No hay emails  de campañas para enviar hoy`);
+        console.log('No hay emails de campañas para enviar en este ciclo');
       }
+
+      // Ajusta sello de tiempo al finalizar (por si el proceso tardó)
+      localStorage.setItem(LAST_RUN_KEY, String(Date.now()));
     } catch (e) {
       console.log('Auto send completed with error:', e);
+      // En error, dejamos el LAST_RUN del inicio para evitar que varias pestañas re-intenten en bucle;
+      // Si prefieres reintentar pronto tras error, elimina el LAST_RUN aquí:
+      // localStorage.removeItem(LAST_RUN_KEY);
     } finally {
+      runningRef.current = false;
       setIsSending(false);
     }
   };
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      autoSendDailyEmails();
-    }, 1000);
+    // Primer intento al montar
+    autoSendDailyEmails();
 
-    return () => clearTimeout(timer);
-  }, [location.pathname]);
+    // Intervalo en segundo plano
+    const id = setInterval(() => {
+      // Opcional: solo ejecutar si la pestaña está visible, para ahorrar recursos
+      if (typeof document !== 'undefined' && typeof document.visibilityState !== 'undefined') {
+        if (document.visibilityState !== 'visible') {
+          // Aun así, el throttle entre pestañas protege de duplicados; puedes comentar esta línea si quieres que corra incluso en background.
+          // console.log('Pestaña no visible, saltando ciclo de intervalo.');
+          // return;
+        }
+      }
+      autoSendDailyEmails();
+    }, intervalMs);
+
+    return () => clearInterval(id);
+  }, [intervalMs]);
+
+  // Sincronización opcional entre pestañas (escucha cambios del sello)
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === LAST_RUN_KEY) {
+        // Aquí podrías cancelar timers o forzar estados si lo ves necesario.
+        // En este diseño no es imprescindible hacer nada.
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
 
   return { isSending };
 }

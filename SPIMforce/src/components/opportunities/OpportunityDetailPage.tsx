@@ -828,12 +828,6 @@ ${notesContent}`;
                       className="absolute inset-0 w-full h-full object-cover"
                       key={opportunity.contact.photo_url}
                     />
-                    <button
-                      type="button"
-                      className="absolute inset-0 w-full h-full"
-                      onClick={() => {}}
-                      aria-label="Actualizar foto"
-                    />
                   </>
                 ) : (
                   <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400">

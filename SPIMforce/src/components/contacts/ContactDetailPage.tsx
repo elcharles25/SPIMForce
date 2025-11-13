@@ -208,6 +208,7 @@ export default function ContactDetailPage() {
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [opportunities, setOpportunities] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [meetingsLoading, setMeeetingsLoading] = useState(true);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isNewMeetingDialogOpen, setIsNewMeetingDialogOpen] = useState(false);
   const [deleteMeetingDialog, setDeleteMeetingDialog] = useState<string | null>(null);
@@ -493,36 +494,6 @@ const handlePhotoUpload = async (file: File) => {
   }
 };
 
-const handleDeletePhoto = async () => {
-  if (!contact) return;
-  
-  try {
-    const response = await fetch(`http://localhost:3001/api/contacts/${contact.id}/photo`, {
-      method: 'DELETE'
-    });
-
-    const data = await response.json();
-
-    if (data.success) {
-      // Recargar el contacto completo desde la BD
-      const updatedContact = await db.getContact(contact.id);
-      setContact(updatedContact);
-      
-      toast({
-        title: 'Foto eliminada',
-        description: 'La foto del contacto se ha eliminado correctamente',
-      });
-    }
-  } catch (error) {
-    console.error('Error eliminando foto:', error);
-    toast({
-      title: 'Error',
-      description: 'Error al eliminar la foto',
-      variant: 'destructive',
-    });
-  }
-};
-
 const handleDragOver = (e: React.DragEvent) => {
   e.preventDefault();
   setIsDraggingPhoto(true);
@@ -718,6 +689,7 @@ const copyToClipboard = async () => {
 const loadData = async () => {
     try {
       setLoading(true);
+      setMeeetingsLoading(true);
       
       // Primero cargar todos los datos
       const [contactData, meetingsData, allOpportunities] = await Promise.all([
@@ -758,6 +730,9 @@ const loadData = async () => {
             const updatedMeetings = await db.getMeetingsByContact(id!);
             setMeetings(updatedMeetings);
           }
+          // Terminar de cargar las reuniones
+          setMeeetingsLoading(false);
+
         } catch (error) {
           console.error('Error en importación automática de emails:', error);
         }
@@ -1096,6 +1071,7 @@ const handleShowMore = () => {
                     />
                     <button
                       type="button"
+                      disabled={meetingsLoading}
                       className="absolute inset-0 w-full h-full"
                       onClick={() => {}}
                       aria-label="Actualizar foto"
@@ -1141,6 +1117,7 @@ const handleShowMore = () => {
             </div>
             <Button 
                 variant="outline"
+                disabled={meetingsLoading}
                 onClick={openEditDialog}
                 className="rounded-full px-6 shadow-sm hover:shadow-md transition-shadow">
               <Pencil className="mr-2 h-4 w-4" />

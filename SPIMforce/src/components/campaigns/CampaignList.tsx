@@ -56,6 +56,7 @@ export const CampaignList = () => {
   const [isSending, setIsSending] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const [isCreating, setIsCreating] = useState(false);
   
   const [repliedContact, setRepliedContact] = useState<{
     name: string;
@@ -753,13 +754,23 @@ const handleSubmit = async (e: React.FormEvent) => {
     status: formData.start_campaign ? "active" : "pending",
   };
 
+  setIsCreating(true);
   try {
     if (editingCampaign) {
       await db.updateCampaign(editingCampaign.id, payload);
       toast({ title: "Éxito", description: "Campaña actualizada" });
     } else {
-      await db.createCampaign(payload);
+      const newCampaign = await db.createCampaign(payload);
       toast({ title: "Éxito", description: "Campaña creada" });
+      
+      const today = new Date().toLocaleDateString('en-CA');
+      if (formData.start_campaign && formData.email_1_date === today) {
+        console.log('🚀 Enviando primer email inmediatamente al crear la campaña');
+        
+        if (newCampaign && newCampaign.id) {
+          await sendEmail(newCampaign as Campaign, 1);
+        }
+      }
     }
     setIsDialogOpen(false);
     initData();
@@ -771,6 +782,8 @@ const handleSubmit = async (e: React.FormEvent) => {
       description: error.message || "Error desconocido",
       variant: "destructive",
     });
+  } finally {
+    setIsCreating(false);
   }
 };
 
@@ -808,11 +821,9 @@ const sendEmail = async (campaign: Campaign, emailNumber: number) => {
       return;
     }
 
-    // Obtener nombre del Account Manager
     const amSetting = await db.getSetting("account_manager");
     const accountManagerName = amSetting?.value?.name || '';
 
-    // Obtener firma
     const signatureSetting = await db.getSetting("email_signature");
     let signature = '';
     if (signatureSetting?.value) {
@@ -825,7 +836,6 @@ const sendEmail = async (campaign: Campaign, emailNumber: number) => {
       signature = signature.replace(/\\n/g, '\n').replace(/\\r/g, '\r').replace(/\\\//g, '/');
     }
 
-    // Obtener plantilla
     const template = await db.getTemplate(campaign.template_id);
 
     if (!template) {
@@ -838,23 +848,23 @@ const sendEmail = async (campaign: Campaign, emailNumber: number) => {
 
     let subject = template[`email_${emailNumber}_subject`];
     subject = subject.replace(/{{Nombre}}/g, campaign.contacts.first_name || '');
+    subject = subject.replace(/{{nombre}}/g, campaign.contacts.first_name || '');
     subject = subject.replace(/{{ano}}/g, currentYear);
     subject = subject.replace(/{{anoSiguiente}}/g, nextYear);
     subject = subject.replace(/{{compania}}/g, campaign.contacts.organization || '');
 
     let body = template[`email_${emailNumber}_html`];
     body = body.replace(/{{Nombre}}/g, campaign.contacts.first_name || '');
+    body = body.replace(/{{nombre}}/g, campaign.contacts.first_name || '');
     body = body.replace(/{{nombreAE}}/g, accountManagerName);
     body = body.replace(/{{compania}}/g, campaign.contacts.organization || '');
     body = body.replace(/{{ano}}/g, currentYear);
     body = body.replace(/{{anoSiguiente}}/g, nextYear);
     
-    // Agregar firma al final
     if (signature) {
       body = body + '<br/><br/>' + signature;
     }
 
-    // Obtener y procesar adjuntos
     const attachmentsFromTemplate = template[`email_${emailNumber}_attachments`] || [];
     console.log('📎 Attachments del template:', attachmentsFromTemplate);
     
@@ -902,7 +912,6 @@ const sendEmail = async (campaign: Campaign, emailNumber: number) => {
 
     console.log('📎 Adjuntos procesados:', processedAttachments.length);
 
-    // 🔥 CAMBIO IMPORTANTE: Pasar tanto el email como el subject
     console.log('📧 Enviando email con:');
     console.log('   To:', campaign.contacts.email);
     console.log('   Subject:', subject);
@@ -912,8 +921,8 @@ const sendEmail = async (campaign: Campaign, emailNumber: number) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
         to: campaign.contacts.email,
-        contactEmail: campaign.contacts.email,  // ← Para buscar email anterior
-        subject,  // ← IMPORTANTE: Enviar el subject procesado
+        contactEmail: campaign.contacts.email,
+        subject,
         body,
         attachments: processedAttachments
       }),
@@ -1065,15 +1074,32 @@ const handleBulkSubmit = async (e: React.FormEvent) => {
     }));
 
     try {
-      // Crear cada campaña individualmente
+      const createdCampaigns: Campaign[] = [];
       for (const campaign of campaignsToCreate) {
-        await db.createCampaign(campaign);
+        const newCampaign = await db.createCampaign(campaign);
+        createdCampaigns.push(newCampaign);
       }
 
       toast({
         title: "Éxito",
         description: `${campaignsToCreate.length} campañas creadas correctamente`,
       });
+      
+      setIsCreating(true);
+      const today = new Date().toLocaleDateString('en-CA');
+      if (bulkFormData.start_campaign && bulkFormData.email_1_date === today) {
+        console.log(`🚀 Enviando primer email a ${createdCampaigns.length} campañas creadas hoy`);
+        
+        for (const campaign of createdCampaigns) {
+          if (campaign && campaign.id) {
+            try {
+              await sendEmail(campaign as Campaign, 1);
+            } catch (emailError) {
+              console.error(`Error enviando email para campaña ${campaign.id}:`, emailError);
+            }
+          }
+        }
+      }
     } catch (error) {
       console.error("Error creando campañas:", error);
       toast({
@@ -1093,8 +1119,11 @@ const handleBulkSubmit = async (e: React.FormEvent) => {
       description: "No se pudieron crear las campañas",
       variant: "destructive",
     });
+  } finally {
+    setIsCreating(false);
   }
 };
+
 
 // Resetear formulario masivo
 const resetBulkForm = () => {
@@ -1222,6 +1251,7 @@ const resetBulkForm = () => {
                   <Label>Fecha Email 1</Label>
                   <Input
                     type="date"
+                    lang="es-ES"
                     value={formData.email_1_date || ''}
                     onChange={(e) => handleDateChange(1, e.target.value)}
                   />
@@ -1230,6 +1260,7 @@ const resetBulkForm = () => {
                   <Label>Fecha Email 2</Label>
                   <Input
                     type="date"
+                    lang="es-ES"
                     value={formData.email_2_date || ''}
                     onChange={(e) => handleDateChange(2, e.target.value)}
                   />
@@ -1285,7 +1316,13 @@ const resetBulkForm = () => {
             {!editingCampaign && <div></div>}
             <div className="flex gap-2">
               <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
-              <Button type="submit">{editingCampaign ? "Actualizar" : "Crear"}</Button>
+              <Button type="submit" disabled={isCreating}>
+                {isCreating 
+                  ? "Creando campaña..." 
+                  : editingCampaign 
+                  ? "Actualizar" 
+                  : "Crear"}
+              </Button>
             </div>
           </div>
         </form>

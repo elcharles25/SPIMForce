@@ -638,8 +638,7 @@ app.delete('/api/templates/:id', (req, res) => {
 
 app.get('/api/campaigns', (req, res) => {
   try {
-    console.log('📋 GET /api/campaigns - Obteniendo campañas...');
-    
+  
     const result = db.exec(`
       SELECT 
         c.*,
@@ -652,11 +651,6 @@ app.get('/api/campaigns', (req, res) => {
     `);
 
     const rows = rowsToObjects(result);
-    
-    console.log(`📊 Total campañas encontradas: ${rows.length}`);
-    if (rows.length > 0) {
-      console.log('📅 Primera campaña created_at:', rows[0].created_at);
-    }
     
     const campaigns = rows.map(row => ({
       id: row.id,
@@ -692,7 +686,6 @@ app.get('/api/campaigns', (req, res) => {
       }
     }));
 
-    console.log('✅ Campañas procesadas correctamente');
     res.json(campaigns);
   } catch (error) {
     console.error('❌ Error obteniendo campaigns:', error);
