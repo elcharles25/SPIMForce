@@ -190,13 +190,66 @@ const getCampaignStatus = (campaign: Campaign): {
     return { status: "Completada sin respuesta", variant: "secondary" };
   }
   
-  // PRIORIDAD 4: Si la campaña está activa y tiene fechas
-  if (campaign.start_campaign && campaign.email_1_date) {
-    return { status: "En curso", variant: "outline" };
+// Utilidad: parsea fechas en varios formatos comunes y devuelve un Date o null
+function parseDateSafe(str) {
+  if (typeof str !== "string") return null;
+  const s = str.trim();
+
+  // ISO completo o parcial: YYYY-MM-DD o YYYY-MM-DDTHH:mm[:ss][Z]
+  // Esto es seguro con new Date en la mayoría de entornos
+  const isoLike = /^\d{4}-\d{2}-\d{2}(?:[T\s]\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?(?:Z|[+\-]\d{2}:\d{2})?)?$/;
+  if (isoLike.test(s)) {
+    const d = new Date(s);
+    return Number.isNaN(d.getTime()) ? null : d;
   }
+
+  // DD/MM/YYYY
+  let m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) {
+    const [_, dd, mm, yyyy] = m.map(Number);
+    // Mes en JS: 0-11
+    const d = new Date(yyyy, mm - 1, dd);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  // DD-MM-YYYY
+  m = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+  if (m) {
+    const [_, dd, mm, yyyy] = m.map(Number);
+    const d = new Date(yyyy, mm - 1, dd);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  // Si llega en otro formato, puedes extender aquí con más casos.
+  return null;
+}
+
+// Normaliza una fecha al inicio del día local
+function normalizeToStartOfDay(d) {
+  const n = new Date(d);
+  n.setHours(0, 0, 0, 0);
+  return n;
+}
+
+// PRIORIDAD 4: Si la campaña está activa y tiene fechas
+if (campaign.start_campaign && campaign.email_1_date) {
+  const parsed = parseDateSafe(campaign.email_1_date);
+
+  if (parsed) {
+    const hoy = normalizeToStartOfDay(new Date());
+    const fechaEmail1 = normalizeToStartOfDay(parsed);
+
+    if (fechaEmail1 > hoy) {
+      return { status: "Pendiente", variant: "outline" };
+    }
+  }
+  // Si no se pudo parsear o la fecha es hoy/pasado, queda "En curso"
+  return { status: "En curso", variant: "outline" };
+}
+
   
   // PRIORIDAD 5: Si no está iniciada o fue desactivada manualmente
-  return { status: "Pendiente", variant: "outline" };
+  return { status: "No activa", variant: "outline" };
 };
 
 const formatDateTime = (dateString: string | null | undefined): string => {
@@ -1651,6 +1704,8 @@ const resetBulkForm = () => {
                             ? "bg-indigo-300 hover:bg-gray-600 text-white"
                             : campaignStatus.status === "Completada sin respuesta"
                             ? "bg-orange-500 hover:bg-orange-600 text-white"
+                            : campaignStatus.status === "No activa"
+                            ? "bg-slate-300 hover:bg-slate-600 text-slate"
                             : ""
                         }
                       >
