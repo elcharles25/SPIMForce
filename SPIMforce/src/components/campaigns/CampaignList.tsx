@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { formatDateES } from "@/utils/dateFormatter";
 import { Plus, Trash2, Send, Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { DatePicker } from "@/components/ui/date-picker";
 import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 interface Campaign {
@@ -1249,20 +1250,16 @@ const resetBulkForm = () => {
               <div className="flex gap-4">
                 <div className="flex-1">
                   <Label>Fecha Email 1</Label>
-                  <Input
-                    type="date"
-                    lang="es-ES"
-                    value={formData.email_1_date || ''}
-                    onChange={(e) => handleDateChange(1, e.target.value)}
-                  />
+                    <DatePicker
+                      value={formData.email_1_date}
+                      onChange={(date) => handleDateChange(1, date)}
+                    />
                 </div>
                 <div className="flex-1">
                   <Label>Fecha Email 2</Label>
-                  <Input
-                    type="date"
-                    lang="es-ES"
-                    value={formData.email_2_date || ''}
-                    onChange={(e) => handleDateChange(2, e.target.value)}
+                  <DatePicker
+                    value={formData.email_2_date}
+                    onChange={(date) => handleDateChange(2, date)}
                   />
                 </div>
               </div>
@@ -1270,28 +1267,25 @@ const resetBulkForm = () => {
               <div className="flex gap-4">
                 <div className="flex-1">
                   <Label>Fecha Email 3</Label>
-                  <Input
-                    type="date"
-                    value={formData.email_3_date || ''}
-                    onChange={(e) => handleDateChange(3, e.target.value)}
+                  <DatePicker
+                    value={formData.email_3_date}
+                    onChange={(date) => handleDateChange(3, date)}
                   />
                 </div>
                 <div className="flex-1">
                   <Label>Fecha Email 4</Label>
-                  <Input
-                    type="date"
-                    value={formData.email_4_date || ''}
-                    onChange={(e) => handleDateChange(4, e.target.value)}
+                  <DatePicker
+                    value={formData.email_4_date}
+                    onChange={(date) => handleDateChange(4, date)}
                   />
                 </div>
               </div>
 
               <div className="w-1/2">
                 <Label>Fecha Email 5</Label>
-                <Input
-                  type="date"
-                  value={formData.email_5_date || ''}
-                  onChange={(e) => handleDateChange(5, e.target.value)}
+                <DatePicker
+                  value={formData.email_5_date}
+                  onChange={(date) => handleDateChange(5, date)}
                 />
               </div>
             </div>

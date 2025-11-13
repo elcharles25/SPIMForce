@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { formatDateTime, formatDateES } from "@/utils/dateFormatter";
 import { Sparkles, TrendingUp, ClipboardList, MessageSquare, Copy, Loader2, RefreshCw, Medal, Upload, X, Image as ImageIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { DatePicker } from "@/components/ui/date-picker";
 import "@/app.css";
 import {
   Table,
@@ -1947,12 +1948,9 @@ const handleShowMore = () => {
 
               <div>
                 <Label htmlFor="meeting_date">Fecha *</Label>
-                <Input
-                  id="meeting_date"
-                  type="date"
+                <DatePicker
                   value={meetingFormData.meeting_date}
-                  onChange={(e) => setMeetingFormData({ ...meetingFormData, meeting_date: e.target.value })}
-                  required
+                  onChange={(date) => setMeetingFormData({ ...meetingFormData, meeting_date: date })}
                 />
               </div>
 

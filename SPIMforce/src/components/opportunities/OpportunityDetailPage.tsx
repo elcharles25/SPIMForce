@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { formatDateTime } from "@/utils/dateFormatter";
+import { DatePicker } from "@/components/ui/date-picker";
 import "@/app.css";
 import {
   Table,
@@ -1499,12 +1500,9 @@ ${notesContent}`;
 
             <div>
               <Label htmlFor="meeting_date">Fecha *</Label>
-              <Input
-                id="meeting_date"
-                type="date"
+              <DatePicker
                 value={meetingForm.meeting_date}
-                onChange={(e) => setMeetingForm({ ...meetingForm, meeting_date: e.target.value })}
-                required
+                onChange={(date) => setMeetingForm({ ...meetingForm, meeting_date: date })}
               />
             </div>
 
