@@ -59,9 +59,8 @@ const EP_LIST = [
 
 const downloadTemplate = () => {
   const templateData = [
-    ['Organización', 'Nombre', 'Apellido', 'email', 'Tier', 'Teléfono', 'Rol tipo de Campañas', 'Rol en su organización', 'Tipo de Contacto', 'Contactado', 'Interesado en Gartner', 'Enviar Webinars', 'Rol para webinars', 'Notas', 'Tier', 'Nombre CSM', 'Email CSM', 'Nombre EP', 'Email EP' ],
-    ['Mi Empresa', 'Juan', 'Pérez', 'juan@email.com', 'Tier 1','+34 666 777 888', 'CIO', 'Director IT', 'Cliente', 'false', 'true', 'true', 'CIO', 'Ejemplo de contacto'],
-    ['Otra Empresa', 'María', 'García', 'maria@email.com', 'Tier 2', '', 'CISO', 'Head of Security', 'Prospect', 'true', 'true', 'false', '', ''],
+    ['Organización', 'Nombre', 'Apellido', 'email', 'Tier', 'Teléfono', 'Rol tipo de Campañas', 'Rol en su organización', 'Tipo de Contacto', 'Contactado', 'Interesado en Gartner', 'Enviar Webinars', 'Rol para webinars', 'Notas', 'URL Linkedin', 'Nombre PA', 'Email PA', 'Teléfono PA', 'Tier','Nombre CSM', 'Email CSM', 'Nombre EP', 'Email EP' ],
+    ['Mi Empresa', 'Juan', 'Pérez', 'juan@email.com', 'Tier 1','+34 666 777 888', 'CIO', 'Director IT', 'Cliente', 'false', 'true', 'true', 'CIO', 'Ejemplo de contacto', 'www.linkedin.com', 'Nombre Apellidos', 'nombre@organizacion.com', '+34 XXX XXX XXX', '1', 'Nombre CSM', 'Email CSM', 'Nombre EP', 'Email EP' ],
   ];
 
   const csv = templateData
@@ -455,15 +454,18 @@ const getFilteredContacts = () => {
           last_contact_date: null,
           interested: interesadoBool,
           webinars_subscribed: webinarsBool,
-          notes: String(row.Notas || row.notes || "").trim() || null,
           webinar_role: String(row["Rol para webinars"] || row.webinar_role || "").trim(),
+          notes: String(row.Notas || row.notes || "").trim() || null,
+          linkedin_url: String(row["URL Linkedin"] || row.linkedin_url || "").trim(),
+          pa_name: String(row["Nombre PA"] || row.pa_name || "").trim(),
+          pa_email: String(row["Email PA"] || row.pa_email || "").trim(),
+          pa_phone: String(row["Teléfono PA"] || row.pa_phone || "").trim(),
           csm_name: String(row["Nombre CSM"] || row.csm_name || "").trim(),
           csm_email: String(row["Email CSM"] || row.csm_email || "").trim(),
           ep_name: String(row["Nombre EP"] || row.ep_name || "").trim(),
           ep_email: String(row["Email EP"] || row.ep_email || "").trim(),
         };
       });
-
       const validContacts = contactsToInsert.filter(c => {
         return c.email && c.email.length > 0 && c.email.includes('@');
       });
@@ -639,6 +641,14 @@ const getFilteredContacts = () => {
                       <li>Interesado en Gartner (true/false)</li>
                       <li>Enviar Webinars (true/false)</li>
                       <li>Rol para Webinars</li>
+                      <li>URL Linkedin</li>
+                      <li>Nombre de PA</li>
+                      <li>Email de PA</li>
+                      <li>Teléfono de PA</li>
+                      <li>Nombre CSM</li>
+                      <li>Email CSM</li>
+                      <li>Nombre EP</li>
+                      <li>Email EP</li>
                       <li>Notas</li>
                     </ul>
                   </div>
