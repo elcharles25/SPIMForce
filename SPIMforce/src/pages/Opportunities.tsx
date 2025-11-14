@@ -68,6 +68,16 @@ const STATUSES = [
   { value: 'Cerrada perdida', label: 'Cerrada perdida' },
 ];
 
+const STATUS_COLORS: Record<string, string> = {
+  'Abierta': 'bg-gray-100 border-gray-500 text-gray-700',
+  'Qualification': 'bg-blue-50 border-blue-500 text-blue-700',
+  'Capabilities': 'bg-indigo-100 border-indigo-500 text-indigo-700',
+  'Propuesta': 'bg-green-100 border-green-500 text-green-700',
+  'Cerrada ganada': 'bg-green-500 text-white',
+  'Cerrada perdida': 'bg-black text-white',
+};
+
+
 const SOLUTION_TYPES = [
   'ExPv2',
   'G4CISO',
@@ -323,6 +333,37 @@ export default function OpportunitiesPage() {
 
   if (loading) return <div className="p-6">Cargando...</div>;
 
+  // Define el orden de prioridad deseado
+  const STATUS_ORDER: Record<string, number> = {
+    'cerrada ganada': 0,
+    'cerrada perdida': 1,
+    'propuesta': 2,
+    'capabilities': 3,
+    'qualification': 4,
+    'abierta': 5,
+  };
+
+  // Función utilitaria para normalizar strings (ignora mayúsculas/acentos)
+  const normalize = (s?: string) =>
+    (s ?? '')
+      .toLocaleLowerCase('es')
+      .normalize('NFD')
+      .replace(/\p{Diacritic}/gu, ''); // elimina tildes
+
+  // Comparador por estado con fallback alfabético
+  const compareByCustomStatus = (a: any, b: any) => {
+    const aStatus = normalize(a?.status);
+    const bStatus = normalize(b?.status);
+
+    const aRank = STATUS_ORDER[aStatus] ?? Number.POSITIVE_INFINITY;
+    const bRank = STATUS_ORDER[bStatus] ?? Number.POSITIVE_INFINITY;
+
+    if (aRank !== bRank) return aRank - bRank;
+
+    // Fallback: si tienen el mismo "rank" o no están en el mapa, orden alfabético por estado
+    return aStatus.localeCompare(bStatus, 'es', { sensitivity: 'base' });
+  };
+
   return (
     <div className="min-h-screen bg-background p-6">
       <div className="max-w-7xl mx-auto">
@@ -530,13 +571,7 @@ export default function OpportunitiesPage() {
                   </TableRow>
                 ) : (
                   [...opportunities]
-                    .sort((a, b) =>
-                      (a?.contact?.organization ?? '').localeCompare(
-                        b?.contact?.organization ?? '',
-                        'es',                    // Usa reglas de español (tildes, ñ)
-                        { sensitivity: 'base' }  // Ignora mayúsculas/minúsculas y acentos
-                      )
-                    )
+                    .sort(compareByCustomStatus)
                     .map((opportunity) => (
                       <TableRow
                         key={opportunity.id}
@@ -549,7 +584,9 @@ export default function OpportunitiesPage() {
                         </TableCell>
                         <TableCell>{opportunity?.contact?.title}</TableCell>
                         <TableCell>
-                          <Badge variant="outline">
+                          <Badge 
+                          variant="outline"
+                          className={STATUS_COLORS[opportunity.status] || 'bg-gray-500'}>
                             {getStatusLabel(opportunity.status)}
                           </Badge>
                         </TableCell>

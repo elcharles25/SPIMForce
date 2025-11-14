@@ -134,7 +134,7 @@ const FEELING_OPTIONS = [
 
 const STATUS_COLORS: Record<string, string> = {
   'Abierta': 'bg-gray-100 border-gray-500 text-gray-700',
-  'Qualification': 'bg-indigo-100 border-indigo-500 text-indigo-700',
+  'Qualification': 'bg-blue-50 border-blue-500 text-blue-700',
   'Capabilities': 'bg-indigo-100 border-indigo-500 text-indigo-700',
   'Propuesta': 'bg-green-100 border-green-500 text-green-700',
   'Cerrada ganada': 'bg-green-500',
