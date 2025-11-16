@@ -54,6 +54,7 @@ interface Contact {
   id: string;
   first_name: string;
   last_name: string;
+  contact_type: string;
   email: string;
   organization: string;
   gartner_role: string;
@@ -955,6 +956,7 @@ Devuelve SOLO un JSON válido (sin markdown, sin comillas adicionales) con esta 
                               <TableRow className="bg-muted">
                                 <TableHead className="w-12"></TableHead>
                                 <TableHead>Nombre</TableHead>
+                                <TableHead>Tipo</TableHead>
                                 <TableHead>Email</TableHead>
                                 <TableHead>Organización</TableHead>
                               </TableRow>
@@ -971,6 +973,7 @@ Devuelve SOLO un JSON válido (sin markdown, sin comillas adicionales) con esta 
                                   <TableCell>
                                     {contact.first_name} {contact.last_name}
                                   </TableCell>
+                                  <TableCell>{contact.contact_type}</TableCell>
                                   <TableCell>{contact.email}</TableCell>
                                   <TableCell>{contact.organization}</TableCell>
                                 </TableRow>
