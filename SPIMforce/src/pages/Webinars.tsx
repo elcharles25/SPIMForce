@@ -5,12 +5,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Settings, Send, Trash2, FileText, X } from "lucide-react";
+import { Settings, Send, Trash2, FileText, X, Loader2, Sparkles, Calendar, Clock, User } from "lucide-react";
 import { WebinarEmailEditor } from "@/components/webinars/WebinarEmailEditor";
 import { useOutlookDraftBatch } from "@/hooks/useOutlookDraft";
 import { formatDateES } from "@/utils/dateFormatter";
+import { Badge } from "@/components/ui/badge";
 
 interface WebinarDistribution {
   id: string;
@@ -51,6 +52,9 @@ const Webinars = () => {
   const [webinarsByRole, setWebinarsByRole] = useState<Record<string, WebinarInfo[]>>({});
   const [analyzingDistId, setAnalyzingDistId] = useState<string | null>(null);
   const [completedAnalysisDistIds, setCompletedAnalysisDistIds] = useState<Set<string>>(new Set());
+  const [showWebinarsDialog, setShowWebinarsDialog] = useState(false);
+  const [currentDistributionId, setCurrentDistributionId] = useState<string | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   useEffect(() => {
     fetchDistributions();
@@ -105,7 +109,6 @@ const Webinars = () => {
       
       console.log(`✅ Archivo subido: ${result.name}`);
       
-      // Guardar información del PDF subido
       setUploadedPdf({
         name: result.name,
         url: result.url,
@@ -118,7 +121,6 @@ const Webinars = () => {
         description: `PDF "${result.name}" subido correctamente` 
       });
 
-      // Limpiar input
       e.target.value = '';
       
     } catch (error) {
@@ -264,36 +266,15 @@ Devuelve SOLO un JSON válido (sin markdown, sin comillas adicionales) con esta 
     }
   };
 
-  const handleAnalysisStart = async (distributionId: string, pdfUrl: string) => {
-    setAnalyzingDistId(distributionId);
+  const performAnalysis = async (pdfUrl: string): Promise<Record<string, WebinarInfo[]>> => {
+    const pdfText = await extractTextFromPdf(pdfUrl);
     
-    try {
-      const pdfText = await extractTextFromPdf(pdfUrl);
-      
-      if (!pdfText || typeof pdfText !== 'string' || pdfText.length < 100) {
-        throw new Error('El PDF parece estar vacío o no contiene texto suficiente');
-      }
-
-      const analysisData = await analyzeWithGemini(pdfText);
-      setWebinarsByRole(analysisData);
-      console.log('✅ Datos de webinars recibidos:', analysisData);
-      
-      toast({
-        title: "Éxito",
-        description: "Análisis completado correctamente",
-      });
-      
-      setCompletedAnalysisDistIds(prev => new Set(prev).add(distributionId));
-      setAnalyzingDistId(null);
-    } catch (error) {
-      console.error('💥 Error en análisis:', error);
-      toast({
-        title: "Error",
-        description: `Error al analizar: ${error instanceof Error ? error.message : 'Desconocido'}`,
-        variant: "destructive",
-      });
-      setAnalyzingDistId(null);
+    if (!pdfText || typeof pdfText !== 'string' || pdfText.length < 100) {
+      throw new Error('El PDF parece estar vacío o no contiene texto suficiente');
     }
+
+    const analysisData = await analyzeWithGemini(pdfText);
+    return analysisData;
   };
 
   const handleSaveDistribution = async () => {
@@ -316,6 +297,7 @@ Devuelve SOLO un JSON válido (sin markdown, sin comillas adicionales) con esta 
     }
 
     setUploading(true);
+    setIsAnalyzing(true);
 
     try {
       console.log('💾 Guardando distribución...');
@@ -337,67 +319,51 @@ Devuelve SOLO un JSON válido (sin markdown, sin comillas adicionales) con esta 
 
       console.log('📦 Distribución a crear:', newDistribution);
 
-      await db.createDistribution(newDistribution);
+      const createdDist = await db.createDistribution(newDistribution);
+      const distributionId = createdDist.id;
 
       toast({ 
         title: "Éxito", 
-        description: "Distribución guardada correctamente" 
+        description: "Distribución guardada. Iniciando análisis con IA..." 
       });
+
+      console.log('🤖 Iniciando análisis automático...');
+      const analysisData = await performAnalysis(`http://localhost:3001${uploadedPdf.url}`);
       
+      setWebinarsByRole(analysisData);
+      setCurrentDistributionId(distributionId);
+      console.log('✅ Análisis completado:', analysisData);
+      
+      setCompletedAnalysisDistIds(prev => new Set(prev).add(distributionId));
+      
+      toast({
+        title: "Análisis completado",
+        description: "Webinars identificados correctamente",
+      });
+
       setUploadedPdf(null);
       await fetchDistributions();
       
+      setShowWebinarsDialog(true);
+      
     } catch (error) {
-      console.error("Error guardando distribución:", error);
+      console.error("Error en el proceso:", error);
       toast({ 
         title: "Error", 
-        description: "No se pudo guardar la distribución", 
+        description: error instanceof Error ? error.message : "Error en el proceso", 
         variant: "destructive" 
       });
     } finally {
       setUploading(false);
+      setIsAnalyzing(false);
     }
   };
 
-  const replaceWebinarVariables = (html: string, role: string): string => {
-    let modifiedHtml = html;
-    const roleWebinars = webinarsByRole[role] || [];
-
-    const simpleReplace = (text: string, pattern: string, replacement: string): string => {
-      return text.split(pattern).join(replacement);
-    };
-
-    for (let i = 0; i < 10; i++) {
-      const webinarIndex = i + 1;
-      const webinar = roleWebinars[i];
-
-      if (webinar) {
-        modifiedHtml = simpleReplace(modifiedHtml, '{{Webinar' + webinarIndex + '}}', webinar.title);
-        modifiedHtml = simpleReplace(modifiedHtml, '{{Titulo' + webinarIndex + '}}', webinar.title);
-        modifiedHtml = simpleReplace(modifiedHtml, '{{Título' + webinarIndex + '}}', webinar.title);
-        modifiedHtml = simpleReplace(modifiedHtml, '{{Fecha' + webinarIndex + '}}', webinar.date);
-        modifiedHtml = simpleReplace(modifiedHtml, '{{Hora' + webinarIndex + '}}', webinar.time);
-        modifiedHtml = simpleReplace(modifiedHtml, '{{Analista' + webinarIndex + '}}', webinar.analyst);
-        modifiedHtml = simpleReplace(modifiedHtml, '{{Razon' + webinarIndex + '}}', webinar.reason);
-      } else {
-        modifiedHtml = simpleReplace(modifiedHtml, '{{Webinar' + webinarIndex + '}}', '');
-        modifiedHtml = simpleReplace(modifiedHtml, '{{Titulo' + webinarIndex + '}}', '');
-        modifiedHtml = simpleReplace(modifiedHtml, '{{Título' + webinarIndex + '}}', '');
-        modifiedHtml = simpleReplace(modifiedHtml, '{{Fecha' + webinarIndex + '}}', '');
-        modifiedHtml = simpleReplace(modifiedHtml, '{{Hora' + webinarIndex + '}}', '');
-        modifiedHtml = simpleReplace(modifiedHtml, '{{Analista' + webinarIndex + '}}', '');
-        modifiedHtml = simpleReplace(modifiedHtml, '{{Razon' + webinarIndex + '}}', '');
-      }
-    }
-
-    return modifiedHtml;
-  };
-
-  const handleCreateDrafts = async (distId: string) => {
-    if (Object.keys(webinarsByRole).length === 0) {
+  const handleCreateDraftsFromDialog = async () => {
+    if (!currentDistributionId || Object.keys(webinarsByRole).length === 0) {
       toast({ 
         title: "Error", 
-        description: "Primero debes analizar el PDF con IA", 
+        description: "No hay datos de webinars disponibles", 
         variant: "destructive" 
       });
       return;
@@ -473,11 +439,14 @@ Devuelve SOLO un JSON válido (sin markdown, sin comillas adicionales) con esta 
             description: `${draftsToCreate.length} borradores creados en Outlook` 
           });
 
-          await db.updateDistribution(distId, { 
+          await db.updateDistribution(currentDistributionId, { 
             sent: true, 
             sent_at: new Date().toISOString() 
           });
           
+          setShowWebinarsDialog(false);
+          setWebinarsByRole({});
+          setCurrentDistributionId(null);
           fetchDistributions();
         },
         onError: (error) => {
@@ -530,7 +499,7 @@ Devuelve SOLO un JSON válido (sin markdown, sin comillas adicionales) con esta 
         <div className="flex items-center justify-between">
           <h1 className="text-3xl font-bold text-foreground">Gestión de Webinars</h1>
           <Button 
-            variant= "outline" 
+            variant="outline" 
             className="rounded-full shadow-sm hover:shadow-md transition-shadow hover:bg-indigo-100"
             onClick={() => setShowEmailEditor(true)}>
             <Settings className="h-4 w-4 mr-2" />
@@ -567,7 +536,6 @@ Devuelve SOLO un JSON válido (sin markdown, sin comillas adicionales) con esta 
               </div>
             </div>
 
-            {/* Mostrar PDF cargado */}
             {uploadedPdf && (
               <div className="mt-2">
                 <div className="flex items-center justify-between p-2 bg-muted rounded">
@@ -592,11 +560,20 @@ Devuelve SOLO un JSON válido (sin markdown, sin comillas adicionales) con esta 
             <div className="flex justify-end">
               <Button 
                 onClick={handleSaveDistribution} 
-                disabled={uploading || !uploadedPdf || !month} 
+                disabled={uploading || !uploadedPdf || !month || isAnalyzing} 
                 className="rounded-full shadow-sm hover:shadow-md transition-shadow bg-indigo-500 hover:bg-indigo-600"
               >
-                <FileText className="h-4 w-4 mr-2" />
-                Guardar Distribución
+                {isAnalyzing ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Analizando...
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-4 w-4 mr-2" />
+                    Analizar y enviar Distribución
+                  </>
+                )}
               </Button>
             </div>
           </CardContent>
@@ -612,93 +589,54 @@ Devuelve SOLO un JSON válido (sin markdown, sin comillas adicionales) con esta 
                 No hay distribuciones creadas. Carga un PDF y guarda una distribución.
               </p>
             ) : (
-            <div className="bg-card rounded-lg shadow overflow-hidden overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-muted hover:bg-muted/50">
-                    <TableHead className="text-center">Mes</TableHead>
-                    <TableHead className="text-center">Archivo</TableHead>
-                    <TableHead className="text-center">Estado</TableHead>
-                    <TableHead className="text-center">Fecha Envío</TableHead>
-                    <TableHead className="text-center">Acciones</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {distributions.map((dist) => (
-                    <TableRow key={dist.id} className="text-sm leading-tight text-center align-middle">
-                      <TableCell className="p-4">{dist.month}</TableCell>
-                      <TableCell className="p-4">
-                        <a href={dist.file_url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                          {dist.file_name}
-                        </a>
-                      </TableCell>
-                      <TableCell className="p-4">
-                        <span className={`leading-tight rounded text-xs ${dist.sent ? "px-10 py-2.5 bg-green-500/20" : "px-9 py-2.5 bg-yellow-500/20"}`}>
-                          {dist.sent ? "Enviado" : "Pendiente"}
-                        </span>
-                      </TableCell>
-                      <TableCell className="p-4">{formatDateES(dist.sent_at)}</TableCell>
-                      <TableCell className="p-4">
-                        <div className="flex justify-center gap-3">
-                          <Button 
-                            size="sm" 
-                            variant="outline" 
-                            className="h-8 px-2 py-0" 
-                            onClick={() => handleAnalysisStart(dist.id, dist.file_url)} 
-                            disabled={dist.sent || analyzingDistId === dist.id || completedAnalysisDistIds.has(dist.id)}
-                            title={
-                              dist.sent 
-                                ? "No se puede analizar - webinar enviado" 
-                                : analyzingDistId === dist.id 
-                                ? "Analizando..."
-                                : completedAnalysisDistIds.has(dist.id)
-                                ? "Análisis completado"
-                                : "Analizar con AI"
-                            }
-                          >
-                            {analyzingDistId === dist.id 
-                              ? 'Analizando con IA...' 
-                              : completedAnalysisDistIds.has(dist.id)
-                              ? 'Análisis con AI completado'
-                              : 'Analizar con AI'
-                            }
-                          </Button>
-                          <Button 
-                            size="sm" 
-                            variant="outline"
-                            className="h-8 px-2 py-0" 
-                            onClick={() => handleCreateDrafts(dist.id)} 
-                            disabled={dist.sent || creatingDrafts || isCreatingDrafts || analyzingDistId !== null || Object.keys(webinarsByRole).length === 0} 
-                            title={
-                              dist.sent
-                                ? "No se pueden crear borradores - webinar enviado"
-                                : Object.keys(webinarsByRole).length === 0
-                                ? "Primero analiza con AI"
-                                : "Crear borradores en Outlook"
-                            }
-                          >
-                            <Send className="h-3 w-3" />
-                          </Button>
-                          <Button 
-                            size="sm" 
-                            variant="destructive" 
-                            className="h-8 px-2 py-0" 
-                            onClick={() => handleDelete(dist.id, dist.file_url)}
-                            disabled={dist.sent}
-                            title={
-                              dist.sent
-                                ? "No se puede eliminar - webinar enviado"
-                                : "Eliminar distribución"
-                            }
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      </TableCell>
+              <div className="bg-card rounded-lg shadow overflow-hidden overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted hover:bg-muted/50">
+                      <TableHead className="text-center">Mes</TableHead>
+                      <TableHead className="text-center">Archivo</TableHead>
+                      <TableHead className="text-center">Estado</TableHead>
+                      <TableHead className="text-center">Fecha Envío</TableHead>
+                      <TableHead className="text-center">Acciones</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {distributions.map((dist) => (
+                      <TableRow key={dist.id} className="text-sm leading-tight text-center align-middle">
+                        <TableCell className="p-4">{dist.month}</TableCell>
+                        <TableCell className="p-4">
+                          <a href={dist.file_url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                            {dist.file_name}
+                          </a>
+                        </TableCell>
+                        <TableCell className="p-4">
+                          <span className={`leading-tight rounded text-xs ${dist.sent ? "px-10 py-2.5 bg-green-500/20" : "px-9 py-2.5 bg-yellow-500/20"}`}>
+                            {dist.sent ? "Enviado" : "Pendiente"}
+                          </span>
+                        </TableCell>
+                        <TableCell className="p-4">{formatDateES(dist.sent_at)}</TableCell>
+                        <TableCell className="p-4">
+                          <div className="flex justify-center gap-3">
+                            <Button 
+                              size="sm" 
+                              variant="destructive" 
+                              className="h-8 px-2 py-0" 
+                              onClick={() => handleDelete(dist.id, dist.file_url)}
+                              disabled={dist.sent}
+                              title={
+                                dist.sent
+                                  ? "No se puede eliminar - webinar enviado"
+                                  : "Eliminar distribución"
+                              }
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               </div>
             )}
           </CardContent>
@@ -710,6 +648,99 @@ Devuelve SOLO un JSON válido (sin markdown, sin comillas adicionales) con esta 
               <DialogTitle>Configurar Plantilla de Email</DialogTitle>
             </DialogHeader>
             <WebinarEmailEditor />
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={showWebinarsDialog} onOpenChange={setShowWebinarsDialog}>
+          <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-xl">
+                <Sparkles className="h-6 w-6 text-indigo-500" />
+                Webinars Identificados por IA
+              </DialogTitle>
+            </DialogHeader>
+
+            <div className="space-y-4 mt-4">
+              {Object.entries(webinarsByRole).map(([role, webinars]) => (
+                <Card key={role} className="border-indigo-200">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Badge variant="outline" className="text-indigo-700 border-indigo-300">
+                        {role}
+                      </Badge>
+                      <span className="text-sm text-muted-foreground">
+                        ({webinars.length} webinar{webinars.length !== 1 ? 's' : ''})
+                      </span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {webinars.map((webinar, index) => (
+                        <div 
+                          key={index} 
+                          className="bg-slate-50 p-4 rounded-lg border border-slate-200 hover:border-indigo-300 transition-colors"
+                        >
+                          <h4 className="font-semibold text-slate-800 mb-2">
+                            {webinar.title}
+                          </h4>
+                          <div className="grid grid-cols-3 gap-3 text-sm">
+                            <div className="flex items-center gap-2 text-slate-600">
+                              <Calendar className="h-4 w-4 text-indigo-500" />
+                              <span>{webinar.date}</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-slate-600">
+                              <Clock className="h-4 w-4 text-indigo-500" />
+                              <span>{webinar.time}</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-slate-600">
+                              <User className="h-4 w-4 text-indigo-500" />
+                              <span>{webinar.analyst}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+
+              {Object.keys(webinarsByRole).length === 0 && (
+                <div className="text-center py-8 text-muted-foreground">
+                  No se identificaron webinars
+                </div>
+              )}
+            </div>
+
+            <DialogFooter className="mt-6">
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setShowWebinarsDialog(false);
+                  setWebinarsByRole({});
+                  setCurrentDistributionId(null);
+                }}
+                disabled={creatingDrafts || isCreatingDrafts}
+              >
+                Cancelar
+              </Button>
+              <Button 
+                onClick={handleCreateDraftsFromDialog}
+                disabled={creatingDrafts || isCreatingDrafts || Object.keys(webinarsByRole).length === 0}
+                className="bg-indigo-500 hover:bg-indigo-600"
+              >
+                {creatingDrafts || isCreatingDrafts ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Creando borradores...
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-4 w-4 mr-2" />
+                    Crear Borradores en Outlook
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
