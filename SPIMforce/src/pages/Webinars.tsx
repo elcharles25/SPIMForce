@@ -748,8 +748,16 @@ Devuelve SOLO un JSON válido (sin markdown, sin comillas adicionales) con esta 
             <TabsTrigger value="mass-email">Emails masivos</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="distributions" className="space-y-6">
-            <div className="flex items-center justify-end mb-4">
+          <TabsContent value="distributions" className="space-y-6 py-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Mail className="h-5 w-5 text-indigo-500" />
+                  Enviar nuevo Webinar
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                            <div className="flex items-center justify-end mb-4">
               <Button 
                 variant="outline" 
                 className="rounded-full shadow-sm hover:shadow-md transition-shadow hover:bg-indigo-100"
@@ -758,12 +766,6 @@ Devuelve SOLO un JSON válido (sin markdown, sin comillas adicionales) con esta 
                 Editar email de Webinars
               </Button>
             </div>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Enviar nuevo Webinar</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="month">Mes</Label>
@@ -774,6 +776,7 @@ Devuelve SOLO un JSON válido (sin markdown, sin comillas adicionales) con esta 
                       onChange={(e) => setMonth(e.target.value)} 
                     />
                   </div>
+                  
                   
                   <div>
                     <Label htmlFor="pdf-upload">Calendario PDF</Label>
@@ -833,13 +836,13 @@ Devuelve SOLO un JSON válido (sin markdown, sin comillas adicionales) con esta 
 
             <Card>
               <CardHeader>
-                <CardTitle>Distribuciones de Webinars</CardTitle>
+                <CardTitle>Distribuciones de Webinars enviadas</CardTitle>
               </CardHeader>
               <CardContent>
                 {distributions.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">
-                    No hay distribuciones creadas. Carga un PDF y guarda una distribución.
-                  </p>
+                <p className="text-center text-muted-foreground py-8">
+                  Aquí se mostrarán las distribuciones de webinars que hayas enviado
+                </p>   
                 ) : (
                   <div className="bg-card rounded-lg shadow overflow-hidden overflow-x-auto">
                     <Table>
@@ -900,7 +903,7 @@ Devuelve SOLO un JSON válido (sin markdown, sin comillas adicionales) con esta 
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Mail className="h-5 w-5 text-indigo-500" />
-                  Envío Masivo de Emails
+                  Enviar email masivo
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
