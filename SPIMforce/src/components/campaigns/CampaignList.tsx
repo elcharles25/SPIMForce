@@ -1593,18 +1593,16 @@ const resetBulkForm = () => {
               <div className="flex gap-4">
                 <div className="flex-1">
                   <Label>Fecha Email 1</Label>
-                  <Input
-                    type="date"
+                  <DatePicker
                     value={bulkFormData.email_1_date}
-                    onChange={(e) => handleBulkDateChange(1, e.target.value)}
+                    onChange={(date) => handleBulkDateChange(1, date)}
                   />
                 </div>
                 <div className="flex-1">
                   <Label>Fecha Email 2</Label>
-                  <Input
-                    type="date"
+                  <DatePicker
                     value={bulkFormData.email_2_date}
-                    onChange={(e) => handleBulkDateChange(2, e.target.value)}
+                    onChange={(date) => handleBulkDateChange(2, date)}
                   />
                 </div>
               </div>
@@ -1612,29 +1610,26 @@ const resetBulkForm = () => {
               <div className="flex gap-4">
                 <div className="flex-1">
                   <Label>Fecha Email 3</Label>
-                  <Input
-                    type="date"
+                  <DatePicker
                     value={bulkFormData.email_3_date}
-                    onChange={(e) => handleBulkDateChange(3, e.target.value)}
+                    onChange={(date) => handleBulkDateChange(3, date)}
                   />
                 </div>
                 <div className="flex-1">
                   <Label>Fecha Email 4</Label>
-                  <Input
-                    type="date"
+                  <DatePicker
                     value={bulkFormData.email_4_date}
-                    onChange={(e) => handleBulkDateChange(4, e.target.value)}
+                    onChange={(date) => handleBulkDateChange(4, date)}
                   />
                 </div>
               </div>
 
               <div className="w-1/2">
                 <Label>Fecha Email 5</Label>
-                <Input
-                  type="date"
-                  value={bulkFormData.email_5_date}
-                  onChange={(e) => handleBulkDateChange(5, e.target.value)}
-                />
+                  <DatePicker
+                    value={bulkFormData.email_5_date}
+                    onChange={(date) => handleBulkDateChange(5, date)}
+                  />
               </div>
             </div>
           </div>

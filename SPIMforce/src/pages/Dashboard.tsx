@@ -1022,10 +1022,10 @@ const Dashboard = () => {
               ) : (
                 <>
                 <div className="flex justify-center gap-2">
-                  <Badge variant="outline" className="text-xs bg-gradient-to-br from-indigo-50 to-white">
+                  <Badge variant="outline" className="text-xs">
                   Tasa de conversión: {formatPercentage(metrics.opportunities.wonOpportunitiesCount)}
                 </Badge>
-                <Badge variant="outline" className="text-xs bg-gradient-to-br from-indigo-50 to-white">
+                <Badge variant="outline" className="text-xs">
                   Reuniones por oportunidad: {metrics.opportunities.averageMeetingsPerOpp.toFixed(1)}                
                 </Badge>
                 </div>

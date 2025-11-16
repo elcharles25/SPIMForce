@@ -601,7 +601,7 @@ const getFilteredContacts = () => {
                   variant="outline"
                   className="rounded-full shadow-sm hover:shadow-md transition-shadow hover:bg-indigo-100">
                   <Upload className="mr-2 h-4 w-4" />
-                  Importar Excel
+                  Importar contactos 
                 </Button>
               </DialogTrigger>
               <DialogContent className="max-w-md">
@@ -663,7 +663,7 @@ const getFilteredContacts = () => {
                   className="rounded-full shadow-sm hover:shadow-md transition-shadow bg-indigo-500 hover:bg-indigo-600"
                   onClick={resetForm}>
                   <Plus className="mr-2 h-4 w-4" />
-                  Nuevo Contacto
+                  Nuevo contacto
                 </Button>
               </DialogTrigger>
               <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">

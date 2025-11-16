@@ -82,7 +82,7 @@ export function DatePicker({ value, onChange, placeholder = "dd/mm/aaaa" }: Date
             type="button"
             variant="ghost"
             size="sm"
-            className="absolute left-20 h-full px-7 py-2 hover:bg-transparent"
+            className="absolute right-0 inset-y-0 h-full px-4 py-2 hover:bg-transparent"
           >
             <CalendarIcon className="h-4 w-4 text-muted-foreground" />
           </Button>

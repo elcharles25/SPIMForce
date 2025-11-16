@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Edit, Trash2, Paperclip, Download } from "lucide-react";
+import { Plus, Edit, Trash2, Paperclip, Download, Upload } from "lucide-react";
 import { TemplateEditor } from "./TemplateEditor";
 import { formatDateES } from "@/utils/dateFormatter";
 
@@ -211,7 +211,7 @@ const escapeXML = (str: string) => {
           className="rounded-full shadow-sm hover:shadow-md transition-shadow bg-indigo-500 hover:bg-indigo-600"
           onClick={() => { setEditingTemplate(null); setShowEditor(true); }}>
           <Plus className="h-4 w-4 mr-2" />
-          Nueva Plantilla
+          Nueva plantilla
         </Button>
         
         {/* Botón Importar XML */}
@@ -219,8 +219,8 @@ const escapeXML = (str: string) => {
           variant="outline" 
           className="rounded-full shadow-sm hover:shadow-md transition-shadow hover:bg-indigo-100"
           onClick={() => document.getElementById('import-xml-input')?.click()}>
-          <Plus className="h-4 w-4 mr-2" />
-          Importar plantilla en XML
+          <Upload className="h-4 w-4 mr-2" />
+          Importar plantilla
         </Button>
         <input
           id="import-xml-input"
