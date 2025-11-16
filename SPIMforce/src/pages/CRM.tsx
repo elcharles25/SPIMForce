@@ -924,10 +924,13 @@ const getFilteredContacts = () => {
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     )}
-                    <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                    <Button type="button" className="rounded-full" variant="outline" onClick={() => setIsDialogOpen(false)}>
                       Cancelar
                     </Button>
-                    <Button type="submit">{editingContact ? "Actualizar" : "Crear"}</Button>
+                    <Button 
+                      className="rounded-full shadow-sm hover:shadow-md transition-shadow bg-indigo-500 hover:bg-indigo-600"
+                      type="submit">{editingContact ? "Actualizar" : "Crear"}
+                      </Button>
                   </div>
                 </form>
               </DialogContent>

@@ -1460,8 +1460,15 @@ const resetBulkForm = () => {
             )}
             {!editingCampaign && <div></div>}
             <div className="flex gap-2">
-              <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
-              <Button type="submit" disabled={isCreating}>
+              <Button 
+                type="button" 
+                variant="outline" 
+                className="rounded-full"
+                onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
+              <Button 
+                type="submit" 
+                disabled={isCreating}
+                className="rounded-full shadow-sm hover:shadow-md transition-shadow bg-indigo-500 hover:bg-indigo-600">
                 {isCreating 
                   ? "Creando campaña..." 
                   : editingCampaign 
@@ -1643,10 +1650,16 @@ const resetBulkForm = () => {
 
           {/* Botones */}
           <div className="flex justify-end gap-2 pt-4 border-t">
-            <Button type="button" variant="outline" onClick={() => setIsBulkDialogOpen(false)}>
+            <Button 
+              type="button" 
+              variant="outline" 
+              className="rounded-full"
+              onClick={() => setIsBulkDialogOpen(false)}>
               Cancelar
             </Button>
-            <Button type="submit">
+            <Button 
+              type="submit"
+              className="rounded-full shadow-sm hover:shadow-md transition-shadow bg-indigo-500 hover:bg-indigo-600">
               Crear {bulkFormData.selected_contacts.length} Campaña{bulkFormData.selected_contacts.length !== 1 ? 's' : ''}
             </Button>
           </div>

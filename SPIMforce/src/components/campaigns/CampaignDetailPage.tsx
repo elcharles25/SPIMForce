@@ -387,20 +387,13 @@ export default function CampaignDetailPage() {
               <div className="flex gap-2">
                 <Button
                   variant="outline"
+                  className='rounded-full'
                   size="sm"
                   onClick={handleEdit}
                   disabled={campaign.has_replied || campaign.emails_sent >= 5 || campaign.email_incorrect}
                 >
                   <Pencil className="h-4 w-4 mr-2" />
                   Editar
-                </Button>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={handleDelete}
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Eliminar
                 </Button>
               </div>
             </div>
@@ -674,14 +667,20 @@ export default function CampaignDetailPage() {
                 type="button"
                 variant="destructive"
                 onClick={handleDelete}
-                className="mr-auto"
+                className="mr-auto rounded-full"
               >
                 <Trash2 className="h-4 w-4" />
               </Button>
-              <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+              <Button 
+                type="button" 
+                className="rounded-full"
+                variant="outline" 
+                onClick={() => setIsEditDialogOpen(false)}>
                 Cancelar
               </Button>
-              <Button type="submit">Actualizar</Button>
+              <Button 
+                className="rounded-full shadow-sm hover:shadow-md transition-shadow bg-indigo-500 hover:bg-indigo-600"
+                type="submit">Actualizar</Button>
             </div>
           </form>
         </DialogContent>

@@ -528,12 +528,16 @@ export default function OpportunitiesPage() {
                   )}
                   <Button
                     type="button"
+                    className="rounded-full"
                     variant="outline"
                     onClick={() => setIsDialogOpen(false)}
                   >
                     Cancelar
                   </Button>
-                  <Button type="submit" disabled={contacts.length === 0}>
+                  <Button 
+                    type="submit" 
+                    className="rounded-full shadow-sm hover:shadow-md transition-shadow bg-indigo-500 hover:bg-indigo-600"
+                    disabled={contacts.length === 0}>
                     {editingOpportunity ? 'Actualizar' : 'Crear'}
                   </Button>
                 </div>

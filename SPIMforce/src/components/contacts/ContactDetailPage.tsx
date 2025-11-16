@@ -1238,7 +1238,7 @@ const handleShowMore = () => {
                   setNotesContent('');
                   setIsEditingNotes(true);
                 }}
-                className="bg-white hover:bg-amber-100 border-amber-300"
+                className="bg-white rounded-full hover:bg-amber-100 border-amber-300" rounded-full
               >
                 <Plus className="mr-2 h-4 w-4" />
                 Añadir notas
@@ -1905,14 +1905,18 @@ const handleShowMore = () => {
                 type="button"
                 variant="destructive"
                 onClick={handleDelete}
-                className="mr-auto"
+                className="mr-auto rounded-full"
               >
                 <Trash2 className="h-4 w-4" />
               </Button>
-              <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+              <Button type="button" 
+                className="rounded-full"
+                variant="outline" onClick={() => setIsEditDialogOpen(false)}>
                 Cancelar
               </Button>
-              <Button type="submit">Actualizar</Button>
+              <Button 
+                className="rounded-full shadow-sm hover:shadow-md transition-shadow bg-indigo-500 hover:bg-indigo-600"
+                type="submit">Actualizar</Button>
             </div>
           </form>
         </DialogContent>
@@ -2010,10 +2014,14 @@ const handleShowMore = () => {
             </div>
 
             <div className="flex justify-end gap-3">
-              <Button type="button" variant="outline" onClick={() => setIsNewMeetingDialogOpen(false)}>
+              <Button 
+                className="rounded-full"
+                type="button" variant="outline" onClick={() => setIsNewMeetingDialogOpen(false)}>
                 Cancelar
               </Button>
-              <Button type="submit">Crear Reunión</Button>
+              <Button 
+                className="rounded-full shadow-sm hover:shadow-md transition-shadow bg-indigo-500 hover:bg-indigo-600"
+                type="submit">Crear Reunión</Button>
             </div>
           </form>
         </DialogContent>

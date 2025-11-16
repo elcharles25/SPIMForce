@@ -358,7 +358,9 @@ const handleDelete = async () => {
   )}
   
   {/* Botón guardar a la derecha */}
-  <Button onClick={handleSave}>
+  <Button 
+    className="rounded-full shadow-sm hover:shadow-md transition-shadow bg-indigo-500 hover:bg-indigo-600"
+    onClick={handleSave}>
     <Save className="mr-2 h-4 w-4" />
     Guardar Plantilla
   </Button>

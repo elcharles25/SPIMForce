@@ -75,8 +75,12 @@ export function WebinarEmailEditor() {
             Variables disponibles: {"{{nombre}}"}, {"{{apellido}}"}, {"{{organizacion}}"}
           </p>
         </div>
-        <Button onClick={saveEmailConfig}>
-          <Save className="h-4 w-4 mr-2" />
+        <Button 
+          className="rounded-full shadow-sm hover:shadow-md transition-shadow bg-indigo-500 hover:bg-indigo-600"
+          onClick={saveEmailConfig}>
+          <Save 
+          className="h-4 w-4 mr-2" 
+          />
           Guardar Plantilla
         </Button>
       </CardContent>

@@ -1435,15 +1435,20 @@ ${notesContent}`;
               type="button"
               variant="destructive"
               onClick={() => setDeleteOpportunityDialog(true)}
-              className="mr-auto"
+              className="mr-auto rounded-full"
             >
               <Trash2 className="h-4 w-4" />
             </Button>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setOpportunityDialog(false)}>
+              <Button 
+                variant="outline" 
+                className="rounded-full"
+                onClick={() => setOpportunityDialog(false)}>
                 Cancelar
               </Button>
-              <Button onClick={handleSaveOpportunity}>
+              <Button 
+                className="rounded-full shadow-sm hover:shadow-md transition-shadow bg-indigo-500 hover:bg-indigo-600"
+                onClick={handleSaveOpportunity}>
                 Actualizar
               </Button>
             </div>
@@ -1542,10 +1547,15 @@ ${notesContent}`;
             />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setMeetingDialog(false)}>
+            <Button 
+              variant="outline" 
+              className="rounded-full"
+              onClick={() => setMeetingDialog(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleSaveMeeting}>
+            <Button 
+              className="rounded-full shadow-sm hover:shadow-md transition-shadow bg-indigo-500 hover:bg-indigo-600"
+              onClick={handleSaveMeeting}>
               {editingMeeting ? 'Actualizar' : 'Crear'}
             </Button>
           </DialogFooter>
