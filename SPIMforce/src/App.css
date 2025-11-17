@@ -51,7 +51,7 @@
 }
 
 .filter-chip-active {
-  @apply bg-blue-100 border-indigo-500 text-indigo-500;
+  @apply bg-indigo-100 border-indigo-500 text-indigo-500;
 }
 
 .filter-chip-inactive {

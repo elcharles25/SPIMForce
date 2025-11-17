@@ -14,6 +14,7 @@ import { Plus, Trash2, Send, Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { DatePicker } from "@/components/ui/date-picker";
 import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import "@/app.css";
 
 interface Campaign {
   id: string;
@@ -58,6 +59,7 @@ export const CampaignList = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [isCreating, setIsCreating] = useState(false);
+  const [bulkContactSearch, setBulkContactSearch] = useState("");
   
   const [repliedContact, setRepliedContact] = useState<{
     name: string;
@@ -1139,16 +1141,15 @@ const handleBulkRoleChange = (role: string) => {
     selected_contacts: []
   });
   
-  // Filtrar plantillas por rol
   const availableTemplates = templates.filter(t => t.gartner_role === role);
   setBulkFilteredTemplates(availableTemplates);
   
-  // Filtrar contactos por rol y tipo permitido
   const availableContacts = contacts.filter(c => 
     c.gartner_role === role &&
     ALLOWED_CONTACT_TYPES.includes(c.contact_type)
   );
   setBulkFilteredContacts(availableContacts);
+  setBulkContactSearch(""); // AÑADIR ESTA LÍNEA
 };
 
 // Manejar selección/deselección de contactos
@@ -1276,8 +1277,6 @@ const handleBulkSubmit = async (e: React.FormEvent) => {
   }
 };
 
-
-// Resetear formulario masivo
 const resetBulkForm = () => {
   setBulkFormData({
     gartner_role: "",
@@ -1292,6 +1291,7 @@ const resetBulkForm = () => {
   });
   setBulkFilteredTemplates([]);
   setBulkFilteredContacts([]);
+  setBulkContactSearch(""); 
 };
   if (loading) return <div className="p-6">Cargando...</div>;
 
@@ -1556,18 +1556,49 @@ const resetBulkForm = () => {
                 </Button>
               </div>
             </div>
-            
-            <div className="border rounded-md p-4 max-h-60 overflow-y-auto space-y-2">
-              {!bulkFormData.gartner_role ? (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  Selecciona un rol para ver los contactos disponibles
-                </p>
-              ) : bulkFilteredContacts.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  No hay contactos disponibles para este rol
-                </p>
-              ) : (
-                bulkFilteredContacts.map((contact) => (
+              {bulkFormData.gartner_role && bulkFilteredContacts.length > 0 && (
+              <div className="mb-3">
+                <Input
+                  type="text"
+                  placeholder="Buscar por nombre u organización..."
+                  value={bulkContactSearch}
+                  onChange={(e) => setBulkContactSearch(e.target.value)}
+                  className="w-full"
+                />
+              </div>
+            )}
+  
+          <div className="border rounded-md p-4 max-h-60 overflow-y-auto space-y-2">
+            {!bulkFormData.gartner_role ? (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                Selecciona un rol para ver los contactos disponibles
+              </p>
+            ) : bulkFilteredContacts.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                No hay contactos disponibles para este rol
+              </p>
+            ) : (
+              (() => {
+                // Filtrar contactos por búsqueda
+                const searchTerm = bulkContactSearch.toLowerCase().trim();
+                const filteredBySearch = bulkFilteredContacts.filter((contact) => {
+                  if (!searchTerm) return true;
+                  
+                  const fullName = `${contact.first_name} ${contact.last_name}`.toLowerCase();
+                  const organization = contact.organization.toLowerCase();
+                  
+                  return fullName.includes(searchTerm) || organization.includes(searchTerm);
+                });
+
+                if (filteredBySearch.length === 0) {
+                  return (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      No se encontraron contactos que coincidan con "{bulkContactSearch}"
+                    </p>
+                  );
+                }
+
+                return filteredBySearch.map((contact) => (
                   <div key={contact.id} className="flex items-center space-x-2">
                     <Checkbox
                       checked={bulkFormData.selected_contacts.includes(contact.id)}
@@ -1577,10 +1608,11 @@ const resetBulkForm = () => {
                       {contact.organization} - {contact.first_name} {contact.last_name} ({contact.title}) [Tier {contact.tier}]
                     </label>
                   </div>
-                ))
-              )}
-            </div>
+                ));
+              })()
+            )}
           </div>
+        </div>
 
           {/* Fechas de envío */}
           <div className="border-t pt-4">

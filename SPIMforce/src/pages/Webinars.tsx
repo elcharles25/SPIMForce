@@ -105,6 +105,9 @@ const Webinars = () => {
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
   const [uploadingFile, setUploadingFile] = useState(false);
   const [sendingEmails, setSendingEmails] = useState(false);
+  const [massEmailContactSearch, setMassEmailContactSearch] = useState("");
+  const [selectedContactTypes, setSelectedContactTypes] = useState<Set<string>>(new Set());
+  const CONTACT_TYPES = ['Cliente', 'Oportunidad', 'Prospect'];
 
   useEffect(() => {
     fetchDistributions();
@@ -113,14 +116,45 @@ const Webinars = () => {
 
   useEffect(() => {
     if (selectedRole) {
-      const filtered = contacts.filter(c => c.gartner_role === selectedRole);
+      let filtered = contacts.filter(c => c.gartner_role === selectedRole);
+      
+      // Filtrar por tipo de contacto
+      if (selectedContactTypes.size > 0) {
+        filtered = filtered.filter(c => selectedContactTypes.has(c.contact_type));
+      }
+      
+      // Filtrar por búsqueda
+      if (massEmailContactSearch.trim()) {
+        const searchTerm = massEmailContactSearch.toLowerCase().trim();
+        filtered = filtered.filter(c => {
+          const fullName = `${c.first_name} ${c.last_name}`.toLowerCase();
+          const organization = c.organization.toLowerCase();
+          return fullName.includes(searchTerm) || organization.includes(searchTerm);
+        });
+      }
+      
       setFilteredContacts(filtered);
       setSelectedContactIds(new Set());
     } else {
       setFilteredContacts([]);
       setSelectedContactIds(new Set());
     }
-  }, [selectedRole, contacts]);
+  }, [selectedRole, contacts, selectedContactTypes, massEmailContactSearch]);
+
+  const toggleContactType = (type: string) => {
+    setSelectedContactTypes(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(type)) {
+        // Si ya está seleccionado, lo deseleccionamos
+        newSet.delete(type);
+      } else {
+        // Si no está seleccionado, limpiamos todo y seleccionamos solo este
+        newSet.clear();
+        newSet.add(type);
+      }
+      return newSet;
+    });
+  };
 
   const fetchContacts = async () => {
     try {
@@ -149,6 +183,11 @@ const Webinars = () => {
         variant: "destructive" 
       });
     }
+  };
+
+  const handleRoleChange = (role: string) => {
+    setSelectedRole(role);
+    setMassEmailContactSearch(""); // Solo limpiar búsqueda al cambiar de rol
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -912,7 +951,7 @@ Devuelve SOLO un JSON válido (sin markdown, sin comillas adicionales) con esta 
               <CardContent className="space-y-6">
                 <div>
                   <Label htmlFor="gartner-role">Seleccionar Rol de Gartner</Label>
-                  <Select value={selectedRole} onValueChange={setSelectedRole}>
+                  <Select value={selectedRole} onValueChange={handleRoleChange}>
                     <SelectTrigger id="gartner-role">
                       <SelectValue placeholder="Selecciona un rol" />
                     </SelectTrigger>
@@ -928,6 +967,24 @@ Devuelve SOLO un JSON válido (sin markdown, sin comillas adicionales) con esta 
 
                 {selectedRole && (
                   <>
+                    {/* CHIPS DE FILTRO POR TIPO */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Label className="text-sm">Filtrar por tipo:</Label>
+                      {CONTACT_TYPES.map((type) => (
+                        <button
+                          key={type}
+                          className={`filter-chip ${
+                            selectedContactTypes.has(type)
+                              ? "filter-chip-active"
+                              : "filter-chip-inactive"
+                          }`}
+                          onClick={() => toggleContactType(type)}
+                        >
+                          {type}
+                        </button>
+                      ))}
+                    </div>
+
                     <div>
                       <div className="flex items-center justify-between mb-3">
                         <Label>Seleccionar Contactos ({selectedContactIds.size} de {filteredContacts.length})</Label>
@@ -951,9 +1008,24 @@ Devuelve SOLO un JSON válido (sin markdown, sin comillas adicionales) con esta 
                         </Button>
                       </div>
 
+                      {/* BARRA DE BÚSQUEDA */}
+                      {filteredContacts.length > 0 && (
+                        <div className="mb-3">
+                          <Input
+                            type="text"
+                            placeholder="Buscar por nombre u organización..."
+                            value={massEmailContactSearch}
+                            onChange={(e) => setMassEmailContactSearch(e.target.value)}
+                            className="w-full"
+                          />
+                        </div>
+                      )}
+
                       {filteredContacts.length === 0 ? (
                         <p className="text-center text-muted-foreground py-4 text-sm">
-                          No hay contactos con el rol seleccionado
+                          {massEmailContactSearch.trim() 
+                            ? `No se encontraron contactos que coincidan con "${massEmailContactSearch}"`
+                            : "No hay contactos con el rol y tipo seleccionados"}
                         </p>
                       ) : (
                         <div className="border rounded-lg max-h-64 overflow-y-auto">
@@ -979,7 +1051,11 @@ Devuelve SOLO un JSON válido (sin markdown, sin comillas adicionales) con esta 
                                   <TableCell>
                                     {contact.first_name} {contact.last_name}
                                   </TableCell>
-                                  <TableCell>{contact.contact_type}</TableCell>
+                                  <TableCell>
+                                    <Badge variant="outline" className="text-xs">
+                                      {contact.contact_type}
+                                    </Badge>
+                                  </TableCell>
                                   <TableCell>{contact.email}</TableCell>
                                   <TableCell>{contact.organization}</TableCell>
                                 </TableRow>
