@@ -127,7 +127,44 @@ export default function OpportunitiesPage() {
     setLoading(false);
   };
 
- const fetchOpportunities = async () => {
+const parseFlexibleDate = (dateString: string | null | undefined): Date => {
+  if (!dateString) return new Date(0);
+  
+  try {
+    if (dateString.match(/^\d{4}-\d{2}-\d{2}/)) {
+      return new Date(dateString);
+    }
+    
+    if (dateString.match(/^\d{2}\/\d{2}\/\d{4}/)) {
+      const parts = dateString.split(' ');
+      const datePart = parts[0];
+      const timePart = parts[1] || '00:00';
+      
+      const [day, month, year] = datePart.split('/');
+      const [hours, minutes] = timePart.split(':');
+      
+      return new Date(
+        parseInt(year),
+        parseInt(month) - 1,
+        parseInt(day),
+        parseInt(hours || '0'),
+        parseInt(minutes || '0')
+      );
+    }
+    
+    const parsed = new Date(dateString);
+    if (!isNaN(parsed.getTime())) {
+      return parsed;
+    }
+    
+    return new Date();
+  } catch (error) {
+    console.error('Error parseando fecha:', dateString, error);
+    return new Date();
+  }
+};
+
+const fetchOpportunities = async () => {
   try {
     const data = await db.getOpportunities();
     setOpportunities(data);
@@ -138,6 +175,7 @@ export default function OpportunitiesPage() {
     
     const oneMonthAgo = new Date();
     oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+    oneMonthAgo.setHours(0, 0, 0, 0);
     
     await Promise.all(
       data.map(async (opp) => {
@@ -154,14 +192,18 @@ export default function OpportunitiesPage() {
           
           if (filteredMeetings.length > 0) {
             const sortedMeetings = [...filteredMeetings].sort((a, b) => {
-              const dateA = new Date(a.meeting_date).getTime();
-              const dateB = new Date(b.meeting_date).getTime();
+              const dateA = parseFlexibleDate(a.meeting_date).getTime();
+              const dateB = parseFlexibleDate(b.meeting_date).getTime();
               return dateB - dateA;
             });
-            const lastMeetingDate = new Date(sortedMeetings[0].meeting_date);
-            lastDates[opp.id] = sortedMeetings[0].meeting_date;
             
-            if (lastMeetingDate < oneMonthAgo) {
+            const lastMeetingDateStr = sortedMeetings[0].meeting_date;
+            lastDates[opp.id] = lastMeetingDateStr;
+            
+            const lastMeetingDate = parseFlexibleDate(lastMeetingDateStr);
+            lastMeetingDate.setHours(0, 0, 0, 0);
+            
+            if (lastMeetingDate.getTime() < oneMonthAgo.getTime()) {
               staleIds.add(opp.id);
             }
           }

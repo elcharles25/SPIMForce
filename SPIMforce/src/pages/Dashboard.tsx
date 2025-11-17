@@ -1038,7 +1038,7 @@ const Dashboard = () => {
                             <p className="text-sm font-semibold text-amber-900">
                               {metrics.opportunities.staleOpportunities.length} oportunidad{metrics.opportunities.staleOpportunities.length !== 1 ? 'es' : ''} sin actividad
                             </p>
-                            <p className="text-xs text-amber-700 mt-1">
+                            <p className="text-xs text-amber-700 mt-1 italic">
                                 Oportunidades sin reuniones en más de 1 mes
                             </p>
                           </div>
