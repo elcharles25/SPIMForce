@@ -18,6 +18,7 @@ import { Plus, Trash2, Pencil, Eye } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { formatDateTime } from "@/utils/dateFormatter";
+import { useSearchParams } from 'react-router-dom';
 
 interface Contact {
   id: string;
@@ -112,6 +113,9 @@ export default function OpportunitiesPage() {
     solution_mode: '',
     offer_presented: false,
   });
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [staleOpportunityIds, setStaleOpportunityIds] = useState<Set<string>>(new Set());
+  const filterType = searchParams.get('filter');
 
   useEffect(() => {
     initData();
@@ -123,56 +127,63 @@ export default function OpportunitiesPage() {
     setLoading(false);
   };
 
-  const fetchOpportunities = async () => {
-    try {
-      const data = await db.getOpportunities();
-      setOpportunities(data);
-      
-      // Cargar reuniones para cada oportunidad
-      const counts: Record<string, number> = {};
-      const lastDates: Record<string, string> = {};
-      
-      await Promise.all(
-        data.map(async (opp) => {
-          try {
-            const meetings = await db.getMeetingsByOpportunity(opp.id);
+ const fetchOpportunities = async () => {
+  try {
+    const data = await db.getOpportunities();
+    setOpportunities(data);
+    
+    const counts: Record<string, number> = {};
+    const lastDates: Record<string, string> = {};
+    const staleIds = new Set<string>();
+    
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+    
+    await Promise.all(
+      data.map(async (opp) => {
+        try {
+          const meetings = await db.getMeetingsByOpportunity(opp.id);
+          
+          const filteredMeetings = meetings.filter(
+            (meeting: Meeting) => 
+              meeting.meeting_type !== 'Email' && 
+              meeting.meeting_type !== 'Teléfono'
+          );
+          
+          counts[opp.id] = filteredMeetings.length;
+          
+          if (filteredMeetings.length > 0) {
+            const sortedMeetings = [...filteredMeetings].sort((a, b) => {
+              const dateA = new Date(a.meeting_date).getTime();
+              const dateB = new Date(b.meeting_date).getTime();
+              return dateB - dateA;
+            });
+            const lastMeetingDate = new Date(sortedMeetings[0].meeting_date);
+            lastDates[opp.id] = sortedMeetings[0].meeting_date;
             
-            // Filtrar reuniones que NO sean "Email" ni "Teléfono"
-            const filteredMeetings = meetings.filter(
-              (meeting: Meeting) => 
-                meeting.meeting_type !== 'Email' && 
-                meeting.meeting_type !== 'Teléfono'
-            );
-            
-            counts[opp.id] = filteredMeetings.length;
-            
-            // Obtener la fecha de la última reunión filtrada
-            if (filteredMeetings.length > 0) {
-              const sortedMeetings = [...filteredMeetings].sort((a, b) => {
-                const dateA = new Date(a.meeting_date).getTime();
-                const dateB = new Date(b.meeting_date).getTime();
-                return dateB - dateA;
-              });
-              lastDates[opp.id] = sortedMeetings[0].meeting_date;
+            if (lastMeetingDate < oneMonthAgo) {
+              staleIds.add(opp.id);
             }
-          } catch (error) {
-            console.error(`Error cargando reuniones para oportunidad ${opp.id}:`, error);
-            counts[opp.id] = 0;
           }
-        })
-      );
-      
-      setMeetingCounts(counts);
-      setLastMeetingDates(lastDates);
-    } catch (error) {
-      console.error('Error cargando oportunidades:', error);
-      toast({
-        title: 'Error',
-        description: 'No se pudieron cargar las oportunidades',
-        variant: 'destructive',
-      });
-    }
-  };
+        } catch (error) {
+          console.error(`Error cargando reuniones para oportunidad ${opp.id}:`, error);
+          counts[opp.id] = 0;
+        }
+      })
+    );
+    
+    setMeetingCounts(counts);
+    setLastMeetingDates(lastDates);
+    setStaleOpportunityIds(staleIds);
+  } catch (error) {
+    console.error('Error cargando oportunidades:', error);
+    toast({
+      title: 'Error',
+      description: 'No se pudieron cargar las oportunidades',
+      variant: 'destructive',
+    });
+  }
+};
 
   const fetchContacts = async () => {
     try {
@@ -392,8 +403,23 @@ export default function OpportunitiesPage() {
     <div className="min-h-screen bg-background p-6">
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center justify-between mb-6">
+        <div>
           <h1 className="text-3xl font-bold text-foreground">Gestión de Oportunidades</h1>
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          {filterType === 'stale' && staleOpportunityIds.size > 0 && (
+            <div className="flex items-center gap-2 mt-2">
+              <Badge variant="outline" className="bg-amber-50 border-amber-200 text-amber-900">
+                Mostrando {staleOpportunityIds.size} oportunidad{staleOpportunityIds.size !== 1 ? 'es' : ''} sin actividad (mayor de 1 mes)
+              </Badge>
+              <button
+                onClick={() => setSearchParams({})}
+                className="text-sm text-indigo-600 hover:text-indigo-700 underline"
+              >
+                Ver todas
+              </button>
+            </div>
+          )}
+        </div>
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
               <Button 
                 className="rounded-full shadow-sm hover:shadow-md transition-shadow bg-indigo-500 hover:bg-indigo-600"
@@ -591,21 +617,27 @@ export default function OpportunitiesPage() {
               </TableRow>
             </TableHeader>
               <TableBody>
-                {opportunities.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="p-8 text-center text-muted-foreground">
-                      No hay oportunidades registradas
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  [...opportunities]
-                    .sort(compareByCustomStatus)
-                    .map((opportunity) => (
-                      <TableRow
-                        key={opportunity.id}
-                        className="cursor-pointer hover:bg-muted/50 text-sm text-center align-middle"
-                        onClick={() => navigate(`/opportunities/${opportunity.id}`)}
-                      >
+              {opportunities.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={6} className="p-8 text-center text-muted-foreground">
+                            No hay oportunidades registradas
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        [...opportunities]
+                          .filter((opp) => {
+                            if (filterType === 'stale') {
+                              return staleOpportunityIds.has(opp.id);
+                            }
+                            return true;
+                          })
+                          .sort(compareByCustomStatus)
+                          .map((opportunity) => (
+                            <TableRow
+                              key={opportunity.id}
+                              className="cursor-pointer hover:bg-muted/50 text-sm text-center align-middle"
+                              onClick={() => navigate(`/opportunities/${opportunity.id}`)}
+                            >
                         <TableCell>{opportunity?.contact?.organization ?? '—'}</TableCell>
                         <TableCell className="font-bold">
                           {opportunity?.contact?.first_name} {opportunity?.contact?.last_name}

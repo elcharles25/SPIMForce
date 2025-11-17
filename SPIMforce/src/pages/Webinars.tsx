@@ -558,6 +558,8 @@ Devuelve SOLO un JSON válido (sin markdown, sin comillas adicionales) con esta 
         
         emailBody = emailBody
           .replace(/{{Nombre}}/g, contact.first_name || '')
+          .replace(/{{nombre}}/g, contact.first_name || '')
+          .replace(/{{Organización}}/g, contact.organization || '')
           .replace(/{{mes}}/g, month.split('-')[1])
           .replace(/{{anio}}/g, month.split('-')[0]);
 
@@ -654,6 +656,7 @@ Devuelve SOLO un JSON válido (sin markdown, sin comillas adicionales) con esta 
       const draftsToCreate = selectedContacts.map((contact) => {
         let personalizedBody = emailBody
           .replace(/{{Nombre}}/g, contact.first_name || '')
+          .replace(/{{nombre}}/g, contact.first_name || '')
           .replace(/{{Apellido}}/g, contact.last_name || '')
           .replace(/{{Organization}}/g, contact.organization || '')
           .replace(/{{Organización}}/g, contact.organization || '')

@@ -1030,32 +1030,25 @@ const Dashboard = () => {
                 </Badge>
                 </div>
                   {metrics.opportunities.staleOpportunities.length > 0 && (
-                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg mb-4">
-                      <div className="flex items-start gap-3">
-                        <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
-                        <div className="flex-1">
-                          <p className="text-sm font-semibold text-amber-900">
-                            {metrics.opportunities.staleOpportunities.length} oportunidad{metrics.opportunities.staleOpportunities.length !== 1 ? 'es' : ''} sin actividad
-                          </p>
+                    <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg mb-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0" />
+                          <div>
+                            <p className="text-sm font-semibold text-amber-900">
+                              {metrics.opportunities.staleOpportunities.length} oportunidad{metrics.opportunities.staleOpportunities.length !== 1 ? 'es' : ''} sin actividad
+                            </p>
+                            <p className="text-xs text-amber-700 mt-1">
+                                Oportunidades sin reuniones en más de 1 mes
+                            </p>
                           </div>
                         </div>
-                          <p className="text-xs text-amber-700 mt-1 mb-2">
-                            {metrics.opportunities.staleOpportunities.length === 1 
-                              ? 'Esta oportunidad no tiene reuniones' 
-                              : 'Estas oportunidades no tienen reuniones'} en más de 1 mes:
-                          </p>
-                          <div className="space-y-1">
-                            {metrics.opportunities.staleOpportunities.map((opp) => (
-                              <div 
-                                key={opp.id}
-                                className="flex items-center gap-2 text-xs bg-white p-2 rounded border border-amber-200 cursor-pointer hover:bg-amber-50 transition-colors"
-                                onClick={() => navigate(`/opportunities/${opp.id}`)}
-                              >
-                                <span className="font-medium text-amber-900">{opp.organization}</span>
-                                <span className="text-amber-700">-</span>
-                                <span className="text-amber-700">{opp.contactName}</span>
-                              </div>
-                            ))}
+                        <button
+                          onClick={() => navigate('/opportunities?filter=stale')}
+                          className="text-xs font-medium text-amber-700 hover:text-amber-700 whitespace-nowrap"
+                        >
+                          Ver oportunidades
+                        </button>
                       </div>
                     </div>
                   )}
