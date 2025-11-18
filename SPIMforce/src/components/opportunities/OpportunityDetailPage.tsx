@@ -180,6 +180,18 @@ const SOLUTION_TYPES = [
 ];
 
 const SOLUTION_MODES = ['Guided', 'Self-directed'];
+const MEETING_TYPE_ORDER = [
+  'Qualification',
+  'Capabilities',
+  'IPW',
+  'POC',
+  'EP POC',
+  'Proposal'
+];
+
+const MEETING_TYPE_MAP: Record<string, string> = {
+  'Cap. Alignment': 'Capabilities'
+};
 
 const PROMPT_CUALIFICACION = `En base a la información contenida en el fichero adjunto, que incluye emails y notas de reuniones realizadas durante un proceso comercial de Gartner con un prospect, realiza el siguiente análisis:
 
@@ -258,6 +270,7 @@ export default function OpportunityDetailPage() {
   const [geminiResult, setGeminiResult] = useState('');
   const [customPromptDialog, setCustomPromptDialog] = useState(false);
   const [customPrompt, setCustomPrompt] = useState('');
+  const [meetingTypesCompleted, setMeetingTypesCompleted] = useState<string[]>([]);
   const [qualificationPriorities, setQualificationPriorities] = useState<Array<{
     priority_title: string;
     priority_challenge: string;
@@ -389,34 +402,44 @@ ${notesContent}`;
     }
   }, [id]);
 
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      const [oppData, meetingsData, contactsData] = await Promise.all([
-        db.getOpportunity(id!),
-        db.getMeetingsByOpportunity(id!),
-        db.getContacts(),
-      ]);
+const loadData = async () => {
+  try {
+    setLoading(true);
+    const [oppData, meetingsData, contactsData] = await Promise.all([
+      db.getOpportunity(id!),
+      db.getMeetingsByOpportunity(id!),
+      db.getContacts(),
+    ]);
 
-      if (oppData && oppData.contact_id) {
-        const fullContact = await db.getContact(oppData.contact_id);
-        oppData.contact = fullContact;
-      }
-
-      setOpportunity(oppData);
-      setMeetings(meetingsData);
-      setContacts(contactsData);
-      
-      if (oppData?.qualification_initiatives) {
-        setQualificationPriorities(oppData.qualification_initiatives);
-        setLastQualificationUpdate(oppData.last_qualification_update);
-      }
-    } catch (error) {
-      console.error('Error cargando datos:', error);
-    } finally {
-      setLoading(false);
+    if (oppData && oppData.contact_id) {
+      const fullContact = await db.getContact(oppData.contact_id);
+      oppData.contact = fullContact;
     }
-  };
+
+    setOpportunity(oppData);
+    setMeetings(meetingsData);
+    setContacts(contactsData);
+    
+    if (oppData?.qualification_initiatives) {
+      setQualificationPriorities(oppData.qualification_initiatives);
+      setLastQualificationUpdate(oppData.last_qualification_update);
+    }
+
+    const filteredMeetings = meetingsData.filter(
+      (meeting: Meeting) => 
+        meeting.meeting_type !== 'Email' && 
+        meeting.meeting_type !== 'Teléfono'
+    );
+    
+    const uniqueTypes = [...new Set(filteredMeetings.map((m: Meeting) => m.meeting_type))];
+    const mappedTypes = uniqueTypes.map(type => MEETING_TYPE_MAP[type as string] || type);
+    setMeetingTypesCompleted(mappedTypes as string[]);
+  } catch (error) {
+    console.error('Error cargando datos:', error);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleAnalyzeQualification = async () => {
     if (meetings.length === 0) {
@@ -826,13 +849,41 @@ ${notesContent}`;
             </Button>
           </div>
 
-          <p className="text-xl text-slate-600 mb-8">
+          <p className="text-xl text-slate-600 mb-6">
             {opportunity.contact.title} - {opportunity.contact.organization}
           </p>
         </div>
     </div>
-      <div className="grid grid-cols-12 gap-6 mb-6">
+    
+    <div>
+      <div className="flex items-center justify-center mb-6">
+        {MEETING_TYPE_ORDER.map((type, index) => {
+          const isCompleted = meetingTypesCompleted.includes(type);
+          const isFirst = index === 0;
+          
+          return (
+            <div
+              key={type}
+              className={`relative text-white text-[8px] font-medium px-1.5 py-0.5 flex items-center justify-center w-full ${
+                isCompleted ? 'bg-indigo-300' : 'bg-gray-400'
+              } ${isFirst ? '' : '-ml-2'}`}
+              style={{
+                clipPath: isFirst 
+                  ? 'polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%)'
+                  : 'polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%, 10px 50%)',
+                height: '40px',
+                padding: '0 10px',
+                zIndex: MEETING_TYPE_ORDER.length - index
+              }}
+            >
+              <span className="whitespace-nowrap font-semibold text-[15px]">{type}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
 
+      <div className="grid grid-cols-12 gap-6 mb-6">
         <Card className="border-gray-200 shadow-sm rounded-2xl col-span-4">
           <CardHeader className="pb-3">
             <CardTitle className="text-lg font-semibold text-slate-800">Información de Contacto</CardTitle>

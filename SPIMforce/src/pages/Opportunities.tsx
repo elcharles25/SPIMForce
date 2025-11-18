@@ -79,7 +79,6 @@ const STATUS_COLORS: Record<string, string> = {
   'Cerrada perdida': 'bg-black text-white',
 };
 
-
 const SOLUTION_TYPES = [
   'ExPv2',
   'G4CISO',
@@ -94,6 +93,44 @@ const SOLUTION_TYPES = [
 
 const SOLUTION_MODES = ['Guided', 'Self-directed'];
 
+const MEETING_TYPE_ORDER = [
+  'Qualification',
+  'Capabilities',
+  'IPW',
+  'POC',
+  'EP POC',
+  'Proposal'
+];
+
+const MEETING_TYPE_MAP: Record<string, string> = {
+  'Cap. Alignment': 'Capabilities'
+};
+
+const getStatusProgress = (status: string): number => {
+  const normalizedStatus = status.toLowerCase();
+  
+  if (normalizedStatus === 'abierta') return 10;
+  if (normalizedStatus === 'qualification') return 25;
+  if (normalizedStatus === 'capabilities') return 50;
+  if (normalizedStatus === 'propuesta') return 90;
+  if (normalizedStatus === 'cerrada ganada' || normalizedStatus === 'cerrada perdida') return 100;
+  
+  return 0;
+};
+
+const getProgressBarColor = (status: string): string => {
+  const normalizedStatus = status.toLowerCase();
+  
+  if (normalizedStatus === 'abierta') return 'bg-gray-400';
+  if (normalizedStatus === 'qualification') return 'bg-blue-400';
+  if (normalizedStatus === 'capabilities') return 'bg-indigo-400';
+  if (normalizedStatus === 'propuesta') return 'bg-mediumseagreen';
+  if (normalizedStatus === 'cerrada ganada') return 'bg-mediumseagreen';
+  if (normalizedStatus === 'cerrada perdida') return 'bg-black';
+  
+  return 'bg-gray-400';
+};
+
 export default function OpportunitiesPage() {
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -105,6 +142,7 @@ export default function OpportunitiesPage() {
   const [loading, setLoading] = useState(true);
   const [meetingCounts, setMeetingCounts] = useState<Record<string, number>>({});
   const [lastMeetingDates, setLastMeetingDates] = useState<Record<string, string>>({});
+  const [meetingTypes, setMeetingTypes] = useState<Record<string, string[]>>({});
   const [form, setForm] = useState<OpportunityForm>({
     organization: '',
     contact_id: '',
@@ -171,6 +209,7 @@ const fetchOpportunities = async () => {
     
     const counts: Record<string, number> = {};
     const lastDates: Record<string, string> = {};
+    const types: Record<string, string[]> = {};
     const staleIds = new Set<string>();
     
     const oneMonthAgo = new Date();
@@ -189,6 +228,10 @@ const fetchOpportunities = async () => {
           );
           
           counts[opp.id] = filteredMeetings.length;
+          
+          const uniqueTypes = [...new Set(filteredMeetings.map((m: Meeting) => m.meeting_type))];
+          const mappedTypes = uniqueTypes.map(type => MEETING_TYPE_MAP[type as string] || type);
+          types[opp.id] = mappedTypes as string[];
           
           if (filteredMeetings.length > 0) {
             const sortedMeetings = [...filteredMeetings].sort((a, b) => {
@@ -210,12 +253,14 @@ const fetchOpportunities = async () => {
         } catch (error) {
           console.error(`Error cargando reuniones para oportunidad ${opp.id}:`, error);
           counts[opp.id] = 0;
+          types[opp.id] = [];
         }
       })
     );
     
     setMeetingCounts(counts);
     setLastMeetingDates(lastDates);
+    setMeetingTypes(types);
     setStaleOpportunityIds(staleIds);
   } catch (error) {
     console.error('Error cargando oportunidades:', error);
@@ -244,7 +289,6 @@ const fetchOpportunities = async () => {
   const openEditDialog = (opportunity: Opportunity) => {
     setEditingOpportunity(opportunity);
     
-    // Extraer solution_type y solution_mode del proposed_solution
     const proposedSolution = opportunity.proposed_solution || '';
     const parts = proposedSolution.split(' - ');
     const solution_type = parts[0] || '';
@@ -259,7 +303,6 @@ const fetchOpportunities = async () => {
       offer_presented: opportunity.offer_presented,
     });
     
-    // Filtrar contactos por organización
     const filtered = contacts.filter(c => c.organization === opportunity.contact.organization);
     setFilteredContacts(filtered);
     
@@ -306,7 +349,6 @@ const fetchOpportunities = async () => {
       return;
     }
 
-    // Concatenar solution_type y solution_mode
     const proposed_solution = `${form.solution_type} - ${form.solution_mode}`;
 
     const payload = {
@@ -326,11 +368,8 @@ const fetchOpportunities = async () => {
       } else {
         await db.createOpportunity(payload);
         
-        // Cambiar contact_type a "Oportunidad"
         try {
-          // Obtener el contacto completo
           const contact = await db.getContact(form.contact_id);
-          // Actualizar solo el campo contact_type
           const updatedContact = {
             ...contact,
             contact_type: 'Oportunidad'
@@ -360,18 +399,13 @@ const fetchOpportunities = async () => {
 
   const handleDelete = async (id: string) => {
     try {
-      // Obtener la oportunidad antes de eliminarla para conocer el contact_id
       const opportunity = opportunities.find(opp => opp.id === id);
       
       if (opportunity) {
-        // Eliminar la oportunidad
         await db.deleteOpportunity(id);
         
-        // Cambiar contact_type a "Prospect"
         try {
-          // Obtener el contacto completo
           const contact = await db.getContact(opportunity.contact_id);
-          // Actualizar solo el campo contact_type
           const updatedContact = {
             ...contact,
             contact_type: 'Prospect'
@@ -410,7 +444,6 @@ const fetchOpportunities = async () => {
 
   if (loading) return <div className="p-6">Cargando...</div>;
 
-  // Define el orden de prioridad deseado
   const STATUS_ORDER: Record<string, number> = {
     'cerrada ganada': 0,
     'cerrada perdida': 1,
@@ -420,14 +453,12 @@ const fetchOpportunities = async () => {
     'abierta': 5,
   };
 
-  // Función utilitaria para normalizar strings (ignora mayúsculas/acentos)
   const normalize = (s?: string) =>
     (s ?? '')
       .toLocaleLowerCase('es')
       .normalize('NFD')
-      .replace(/\p{Diacritic}/gu, ''); // elimina tildes
+      .replace(/\p{Diacritic}/gu, '');
 
-  // Comparador por estado con fallback alfabético
   const compareByCustomStatus = (a: any, b: any) => {
     const aStatus = normalize(a?.status);
     const bStatus = normalize(b?.status);
@@ -437,7 +468,6 @@ const fetchOpportunities = async () => {
 
     if (aRank !== bRank) return aRank - bRank;
 
-    // Fallback: si tienen el mismo "rank" o no están en el mapa, orden alfabético por estado
     return aStatus.localeCompare(bStatus, 'es', { sensitivity: 'base' });
   };
 
@@ -641,11 +671,12 @@ const fetchOpportunities = async () => {
         <div className="bg-card rounded-lg shadow overflow-hidden overflow-x-auto">
           <Table className="w-full table-fixed">
             <colgroup>
-              <col className="w-[150px]" />
-              <col className="w-[150px]" />
-              <col className="w-[200px]" />
+              <col className="w-[100px]" />
+              <col className="w-[100px]" />
               <col className="w-[120px]" />
               <col className="w-[100px]" />
+              <col className="w-[300px]" />
+              <col className="w-[60px]" />
               <col className="w-[150px]" />
             </colgroup>
             <TableHeader>
@@ -654,6 +685,7 @@ const fetchOpportunities = async () => {
                 <TableHead className="text-center">Contacto</TableHead>
                 <TableHead className="text-center">Cargo</TableHead>
                 <TableHead className="text-center">Estado</TableHead>
+                <TableHead className="text-center">Progreso</TableHead>
                 <TableHead className="text-center">Oferta</TableHead>
                 <TableHead className="text-center">Reuniones</TableHead>
               </TableRow>
@@ -661,7 +693,7 @@ const fetchOpportunities = async () => {
               <TableBody>
               {opportunities.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={6} className="p-8 text-center text-muted-foreground">
+                          <TableCell colSpan={7} className="p-8 text-center text-muted-foreground">
                             No hay oportunidades registradas
                           </TableCell>
                         </TableRow>
@@ -674,7 +706,10 @@ const fetchOpportunities = async () => {
                             return true;
                           })
                           .sort(compareByCustomStatus)
-                          .map((opportunity) => (
+                          .map((opportunity) => {
+                            const completedMeetings = meetingTypes[opportunity.id] || [];
+                            
+                            return (
                             <TableRow
                               key={opportunity.id}
                               className="cursor-pointer hover:bg-muted/50 text-sm text-center align-middle"
@@ -686,11 +721,48 @@ const fetchOpportunities = async () => {
                         </TableCell>
                         <TableCell>{opportunity?.contact?.title}</TableCell>
                         <TableCell>
-                          <Badge 
-                          variant="outline"
-                          className={STATUS_COLORS[opportunity.status] || 'bg-gray-500'}>
-                            {getStatusLabel(opportunity.status)}
-                          </Badge>
+                                <Badge 
+                                  variant="outline"
+                                  className={STATUS_COLORS[opportunity.status] || 'bg-gray-500'}>
+                                  {getStatusLabel(opportunity.status)}
+                               </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col items-center gap-2">  
+                            <div className="w-full px-2">
+                              <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                                <div 
+                                  className={`h-full rounded-full transition-all duration-300 ${getProgressBarColor(opportunity.status)}`}
+                                  style={{ width: `${getStatusProgress(opportunity.status)}%` }}
+                                />
+                              </div>
+                            </div>
+                            <div className="flex items-center justify-center mt-1">
+                              {MEETING_TYPE_ORDER.map((type, index) => {
+                                const isCompleted = completedMeetings.includes(type);
+                                const isFirst = index === 0;
+                                const isLast = index === MEETING_TYPE_ORDER.length - 1;
+                                
+                                return (
+                                  <div
+                                    key={type}
+                                    className={`relative text-white text-[8px] font-medium px-1.5 py-0.5 flex items-center justify-center ${
+                                      isCompleted ? 'bg-indigo-300' : 'bg-gray-400'
+                                    } ${isFirst ? '' : '-ml-2'}`}
+                                    style={{
+                                      clipPath: isFirst 
+                                        ? 'polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%)'
+                                        : 'polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%, 10px 50%)',
+                                      minWidth: '63px',
+                                      zIndex: MEETING_TYPE_ORDER.length - index
+                                    }}
+                                  >
+                                    <span className="whitespace-nowrap text-[7px]">{type}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
                         </TableCell>
                         <TableCell>
                           {opportunity.offer_presented ? (
@@ -712,7 +784,8 @@ const fetchOpportunities = async () => {
                           </div>
                         </TableCell>
                       </TableRow>
-                    ))
+                            );
+                          })
                 )}
               </TableBody>
 
