@@ -1790,7 +1790,7 @@ app.get('/api/meetings/opportunity/:opportunityId', (req, res) => {
       contact_id: row.contact_id,
       meeting_type: row.meeting_type,
       meeting_date: formatDateTime(row.meeting_date),
-      feeling: row.feeling || 'neutral',
+      feeling: row.feeling || '',
       notes: row.notes,
       created_at: formatDateTime(row.created_at),
       contact: row.contact_id ? {
@@ -1832,7 +1832,7 @@ app.post('/api/meetings', (req, res) => {
       contact_id, 
       meeting_type, 
       meeting_date, 
-      feeling || 'Neutral', 
+      feeling || '', 
       notes || null
     ]);
     
@@ -1854,7 +1854,7 @@ app.post('/api/meetings', (req, res) => {
       contact_id: row.contact_id,
       meeting_type: row.meeting_type,
       meeting_date: formatDateTime(row.meeting_date),
-      feeling: row.feeling || 'neutral',
+      feeling: row.feeling || '',
       notes: row.notes,
       created_at: formatDateTime(row.created_at),
       contact: row.contact_id ? {
@@ -1881,7 +1881,7 @@ app.put('/api/meetings/:id', (req, res) => {
     const contact_id = req.body.contact_id;
     const meeting_type = req.body.meeting_type;
     const meeting_date = req.body.meeting_date;
-    const feeling = req.body.feeling || 'Neutral';
+    const feeling = req.body.feeling || '';
     const notes = req.body.notes || null;
     
     // Validar campos requeridos
@@ -1931,7 +1931,7 @@ app.put('/api/meetings/:id', (req, res) => {
       contact_id: row.contact_id,
       meeting_type: row.meeting_type,
       meeting_date: formatDateTime(row.meeting_date),
-      feeling: row.feeling || 'Neutral',
+      feeling: row.feeling || '',
       notes: row.notes,
       created_at: formatDateTime(row.created_at),
       contact: row.contact_id ? {
@@ -1982,7 +1982,7 @@ app.get('/api/meetings/contact/:contactId', (req, res) => {
       contact_id: row.contact_id,
       meeting_type: row.meeting_type,
       meeting_date: formatDateTime(row.meeting_date),
-      feeling: row.feeling || 'neutral',
+      feeling: row.feeling || '',
       notes: row.notes,
       created_at: formatDateTime(row.created_at),
       opportunity: {
@@ -2018,7 +2018,7 @@ app.get('/api/meetings/:id', (req, res) => {
       contact_id: row.contact_id,
       meeting_type: row.meeting_type,
       meeting_date: row.meeting_date,
-      feeling: row.feeling || 'neutral',
+      feeling: row.feeling || '',
       notes: row.notes,
       created_at: formatDateTime(row.created_at),
     };

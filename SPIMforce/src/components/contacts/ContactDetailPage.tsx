@@ -280,7 +280,7 @@ const [formData, setFormData] = useState({
     opportunity_id: "none",
     meeting_type: "",
     meeting_date: "",
-    feeling: "Neutral",
+    feeling: "",
     notes: "",
       });
 
@@ -814,7 +814,7 @@ const handleCSMChange = (selectedName: string) => {
 
   const getFeelingColor = (feeling: string) => {
     const option = FEELING_OPTIONS.find(f => f.value === feeling);
-    return option?.color || 'bg-gray-500';
+    return option?.color || '';
   };
 
   const getFeelingLabel = (feeling: string) => {
@@ -955,6 +955,13 @@ const handleCreateMeeting = async (e: React.FormEvent) => {
     return;
   }
 
+  // Determinar si la reunión es futura
+  const meetingDate = new Date(meetingFormData.meeting_date);
+  meetingDate.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const isFuture = meetingDate > today;
+
   const payload = {
     opportunity_id: (meetingFormData.opportunity_id === "none" || !meetingFormData.opportunity_id) 
       ? "Sin oportunidad" 
@@ -962,7 +969,7 @@ const handleCreateMeeting = async (e: React.FormEvent) => {
     contact_id: id!,
     meeting_type: meetingFormData.meeting_type,
     meeting_date: meetingFormData.meeting_date,
-    feeling: meetingFormData.feeling,
+    feeling: isFuture ? null : meetingFormData.feeling,  // null si es futura
     notes: meetingFormData.notes || null,
   };
 
@@ -972,22 +979,22 @@ const handleCreateMeeting = async (e: React.FormEvent) => {
     setIsNewMeetingDialogOpen(false);
     
     const notesForFollowUp = meetingFormData.notes;
-    const dateForFollowUp = meetingFormData.meeting_date;  // ← GUARDAR LA FECHA
+    const dateForFollowUp = meetingFormData.meeting_date;
     
     setMeetingFormData({
       opportunity_id: "none",
       meeting_type: "",
       meeting_date: "",
-      feeling: "Neutral",
+      feeling: "",
       notes: "",
     });
     
     loadData();
     
-    // Preguntar si quiere generar follow-up solo si hay notas
-    if (notesForFollowUp && notesForFollowUp.trim()) {
+    // Solo preguntar por follow-up si la reunión es pasada o de hoy Y tiene notas
+    if (!isFuture && notesForFollowUp && notesForFollowUp.trim()) {
       setCreatedMeetingNotes(notesForFollowUp);
-      setCreatedMeetingDate(dateForFollowUp);  // ← GUARDAR LA FECHA
+      setCreatedMeetingDate(dateForFollowUp);
       setFollowUpDialog(true);
     }
   } catch (error) {
@@ -998,7 +1005,6 @@ const handleCreateMeeting = async (e: React.FormEvent) => {
     });
   }
 };
-
 const handleGenerateFollowUp = async () => {
   if (!createdMeetingNotes || !contact) {
     toast({
@@ -1700,7 +1706,7 @@ const handleShowMore = () => {
                     <TableCell className="text-center py-1">
                       <div className="flex items-center justify-center gap-2 py-1">
                         <div className={`w-3 h-3 rounded-full ${getFeelingColor(meeting.feeling)}`} />
-                        <span className="text-xs">{getFeelingLabel(meeting.feeling)}</span>
+                        <span className="sm-sm">{getFeelingLabel(meeting.feeling)}</span>
                       </div>
                     </TableCell>
                     <TableCell className="max-w-md truncate py-1 text-sm">

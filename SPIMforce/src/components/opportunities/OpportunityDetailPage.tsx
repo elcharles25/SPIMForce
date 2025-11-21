@@ -7,6 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { formatDateTime } from "@/utils/dateFormatter";
 import { DatePicker } from "@/components/ui/date-picker";
 import { generateFollowUpEmail } from '@/utils/followUpGenerator';
+import { Calendar } from "@/components/ui/calendar";
+import { es } from 'date-fns/locale';
 import "@/app.css";
 import {
   Table,
@@ -44,7 +46,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Switch } from '@/components/ui/switch';
-import { ArrowLeft, Plus, Pencil, Trash2, Mail, Phone, Linkedin, Sparkles, TrendingUp, ClipboardList, MessageSquare, Copy, Loader2, ImageIcon, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Plus, Pencil, Trash2, Mail, Phone, Linkedin, Sparkles, TrendingUp, ClipboardList, MessageSquare, Copy, Loader2, ImageIcon, ChevronRight, CalendarIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface Opportunity {
@@ -290,6 +292,7 @@ export default function OpportunityDetailPage() {
     }>;
   }>>([]);
   const [qualificationLoading, setQualificationLoading] = useState(false);
+  const [calendarDate, setCalendarDate] = useState<Date>(new Date());
   const [lastQualificationUpdate, setLastQualificationUpdate] = useState<string | null>(null);
   const [selectedPriority, setSelectedPriority] = useState<any>(null);
   const [priorityDetailDialog, setPriorityDetailDialog] = useState(false);
@@ -303,7 +306,7 @@ export default function OpportunityDetailPage() {
     contact_id: '',
     meeting_type: '',
     meeting_date: '',
-    feeling: 'Neutral',
+    feeling: '',
     notes: '',
   });
 
@@ -736,7 +739,7 @@ const handleGenerateFollowUp = async () => {
         meeting_type: meeting.meeting_type,
         meeting_date: dateStr,
         notes: meeting.notes || '',
-        feeling: meeting.feeling || 'neutral',
+        feeling: meeting.feeling || '',
       });
     } else {
       setEditingMeeting(null);
@@ -745,7 +748,7 @@ const handleGenerateFollowUp = async () => {
         meeting_type: '',
         meeting_date: '',
         notes: '',
-        feeling: 'Neutral',
+        feeling: '',
       });
     }
     setMeetingDialog(true);
@@ -758,13 +761,20 @@ const handleSaveMeeting = async () => {
   }
 
   try {
+    // Determinar si la reunión es futura
+    const meetingDate = new Date(meetingForm.meeting_date);
+    meetingDate.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const isFuture = meetingDate > today;
+
     const meetingData = {
       opportunity_id: id!,
       contact_id: meetingForm.contact_id,
       meeting_type: meetingForm.meeting_type,
       meeting_date: meetingForm.meeting_date,
       notes: meetingForm.notes,
-      feeling: meetingForm.feeling,
+      feeling: isFuture ? null : meetingForm.feeling,  // null si es futura
     };
 
     if (editingMeeting) {
@@ -776,10 +786,10 @@ const handleSaveMeeting = async () => {
       await loadData();
       setMeetingDialog(false);
       
-      // Preguntar si quiere generar follow-up solo si hay notas
-      if (meetingForm.notes && meetingForm.notes.trim()) {
+      // Solo preguntar por follow-up si la reunión es pasada o de hoy Y tiene notas
+      if (!isFuture && meetingForm.notes && meetingForm.notes.trim()) {
         setCreatedMeetingNotes(meetingForm.notes);
-        setCreatedMeetingDate(meetingForm.meeting_date);  // ← GUARDAR LA FECHA
+        setCreatedMeetingDate(meetingForm.meeting_date);
         setFollowUpDialog(true);
       }
     }
@@ -788,7 +798,6 @@ const handleSaveMeeting = async () => {
     alert('Error al guardar la reunión');
   }
 };
-
   const handleDeleteMeeting = async (meetingId: string) => {
     try {
       await db.deleteMeeting(meetingId);
@@ -801,14 +810,80 @@ const handleSaveMeeting = async () => {
 
   const getFeelingColor = (feeling: string) => {
     const option = FEELING_OPTIONS.find(f => f.value === feeling);
-    return option?.color || 'bg-gray-500';
+    return option?.color || '';
   };
 
   const getFeelingLabel = (feeling: string) => {
     const option = FEELING_OPTIONS.find(f => f.value === feeling);
     return option?.label || feeling;
   };
+  const getMeetingDates = (): Date[] => {
+  return meetings.map(meeting => {
+    const dateStr = meeting.meeting_date.split(' ')[0];
+    if (dateStr.includes('/')) {
+      const [day, month, year] = dateStr.split('/');
+      return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    } else {
+      return new Date(dateStr);
+    }
+  });
+};
 
+const getPastMeetingDates = (): Date[] => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return getMeetingDates().filter(date => date < today);
+};
+
+const getFutureMeetingDates = (): Date[] => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return getMeetingDates().filter(date => date >= today);
+};
+
+const getMeetingsForDate = (date: Date): Meeting[] => {
+  const dateStr = date.toISOString().split('T')[0];
+  return meetings.filter(meeting => {
+    const meetingDateStr = meeting.meeting_date.split(' ')[0];
+    let normalizedDate = '';
+    if (meetingDateStr.includes('/')) {
+      const [day, month, year] = meetingDateStr.split('/');
+      normalizedDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    } else {
+      normalizedDate = meetingDateStr;
+    }
+    return normalizedDate === dateStr;
+  });
+};
+
+const handleDateClick = (date: Date | undefined) => {
+  if (!date) return;
+  
+  const meetingsOnDate = getMeetingsForDate(date);
+  
+  if (meetingsOnDate.length > 0) {
+    toast({
+      title: "Reuniones en esta fecha",
+      description: `${meetingsOnDate.length} reunión(es) registrada(s)`,
+    });
+  } else {
+    // Formatear fecha sin conversión UTC
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${day}`;
+    
+    setMeetingForm({
+      contact_id: opportunity?.contact_id || '',
+      meeting_type: '',
+      meeting_date: dateStr,
+      notes: '',
+      feeling: '',
+    });
+    setEditingMeeting(null);
+    setMeetingDialog(true);
+  }
+};
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -1302,7 +1377,7 @@ const handleSaveMeeting = async () => {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="mb-6 border-gray-200 shadow-sm rounded-2xl">
         <CardHeader>
           <div className="flex justify-between items-center">
             <CardTitle className="text-lg font-semibold text-slate-800">Interacciones ({meetings.length})</CardTitle>
@@ -1315,58 +1390,109 @@ const handleSaveMeeting = async () => {
           </div>
         </CardHeader>
         <CardContent>
-          {meetings.length === 0 ? (
-            <p className="text-center py-8 text-muted-foreground">
-              No hay reuniones registradas
-            </p>
-          ) : (
-            <div className="bg-card rounded-lg shadow overflow-hidden overflow-x-auto">
-              <Table className="w-full table-fixed">
-                <colgroup>
-                  <col className="w-[100px]" />
-                  <col className="w-[120px]" />
-                  <col className="w-[100px]" />
-                  <col className="w-[600px]" />
-                </colgroup>
-                <TableHeader>
-                  <TableRow className="bg-muted hover:bg-muted/50">
-                    <TableHead className="text-center">Fecha</TableHead>
-                    <TableHead className="text-center">Tipo</TableHead>
-                    <TableHead className="text-center">Feeling</TableHead>
-                    <TableHead className="text-center">Notas</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {meetings.map((meeting) => {
-                    const contact = contacts.find(c => c.id === meeting.contact_id);
-                    return (
-                      <TableRow
-                        key={meeting.id}
-                        className="cursor-pointer hover:bg-muted/50"
-                        onClick={() => navigate(`/meetings/${meeting.id}`, {
-                          state: { from: 'opportunity', opportunityId: opportunity.id }
-                        })}
-                      >
-                        <TableCell className="text-center">{formatDateTime(meeting.meeting_date)}</TableCell>
-                        <TableCell className="text-center">
-                          <Badge variant="outline" className="text-sm">{meeting.meeting_type}</Badge>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <div className="flex text-center justify-center gap-2">
-                            <div className={`w-4 h-4 rounded-full ${getFeelingColor(meeting.feeling)}`} />
-                            <span className="text-sm text-center">{getFeelingLabel(meeting.feeling)}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="max-w-md truncate">
-                          {meeting.notes || 'Sin notas'}
-                        </TableCell>
+          <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-6">
+            {/* Tabla de reuniones */}
+            <div>
+              {meetings.length === 0 ? (
+                <p className="text-center py-8 text-muted-foreground">
+                  No hay reuniones registradas
+                </p>
+              ) : (
+                <div className="bg-card rounded-lg shadow overflow-hidden overflow-x-auto">
+                  <Table className="w-full table-fixed">
+                    <colgroup>
+                      <col className="w-[100px]" />
+                      <col className="w-[120px]" />
+                      <col className="w-[120px]" />
+                      <col className="w-[600px]" />
+                    </colgroup>
+                    <TableHeader>
+                      <TableRow className="bg-muted hover:bg-muted/50">
+                        <TableHead className="text-center">Fecha</TableHead>
+                        <TableHead className="text-center">Tipo</TableHead>
+                        <TableHead className="text-center">Feeling</TableHead>
+                        <TableHead className="text-center">Notas</TableHead>
                       </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {meetings.map((meeting) => {
+                        const contact = contacts.find(c => c.id === meeting.contact_id);
+                        return (
+                          <TableRow
+                            key={meeting.id}
+                            className="cursor-pointer hover:bg-muted/50"
+                            onClick={() => navigate(`/meetings/${meeting.id}`, {
+                              state: { from: 'opportunity', opportunityId: opportunity.id }
+                            })}
+                          >
+                            <TableCell className="text-center">{formatDateTime(meeting.meeting_date)}</TableCell>
+                            <TableCell className="text-center">
+                              <Badge variant="outline" className="text-sm">{meeting.meeting_type}</Badge>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <div className="flex text-center justify-center gap-2">
+                                <div className={`w-4 h-4 rounded-full ${getFeelingColor(meeting.feeling)}`} />
+                                <span className="text-sm text-center">{getFeelingLabel(meeting.feeling)}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="max-w-md truncate">
+                              {meeting.notes || 'Sin notas'}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
             </div>
-          )}
+            {/* Calendario */}
+            <div className="flex flex-col items-center justify-start">
+              <div className="border rounded-lg p-4 bg-white">
+                <Calendar
+                  mode="single"
+                  selected={calendarDate}
+                  onSelect={(date) => date && setCalendarDate(date)}
+                  onDayClick={handleDateClick}
+                  locale={es}
+                  initialFocus
+                  captionLayout="dropdown-buttons"
+                  fromYear={2020}  
+                  toYear={2040}    
+                  classNames={{
+                    caption: "flex justify-center pt-1 relative items-center",
+                    caption_dropdowns: "flex items-center gap-0",
+                    // Estas 3 claves dependen de react-day-picker v9:
+                    dropdown: "bg-transparent px-1 py-0 text-sm text-foreground",
+                    dropdown_month: "bg-transparent px-1 py-0 text-sm text-foreground",
+                    dropdown_year: "bg-transparent px-2 py-0 text-sm text-foreground",
+            }}
+                  modifiers={{
+                    pastMeeting: getPastMeetingDates(),
+                    futureMeeting: getFutureMeetingDates(),
+                  }}
+                  modifiersClassNames={{
+                    pastMeeting: 'bg-indigo-200 text-indigo-900 font-bold hover:bg-indigo-300',
+                    futureMeeting: 'bg-green-200 text-green-900 font-bold hover:bg-green-300',
+                  }}
+                />
+              </div>
+              
+              <div className="mt-4 flex flex-col gap-2 text-sm">
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded bg-indigo-200 border border-indigo-500"></div>
+                  <span>Reuniones pasadas</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded bg-green-200 border border-green-500"></div>
+                  <span>Reuniones futuras</span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2 text-center">
+                  Haz clic en un día vacío para agendar una reunión
+                </p>
+              </div>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
@@ -1584,27 +1710,40 @@ const handleSaveMeeting = async () => {
               />
             </div>
 
-            <div>
-              <Label htmlFor="feeling">Sensación de la Reunión</Label>
-              <Select
-                value={meetingForm.feeling}
-                onValueChange={(value) => setMeetingForm({ ...meetingForm, feeling: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {FEELING_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      <div className="flex items-center gap-2">
-                        <div className={`w-3 h-3 rounded-full ${option.color}`} />
-                        {option.label}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {/* Solo mostrar sensación si la fecha es pasada o de hoy */}
+            {(() => {
+              if (!meetingForm.meeting_date) return null;
+              const meetingDate = new Date(meetingForm.meeting_date);
+              meetingDate.setHours(0, 0, 0, 0);
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              
+              if (meetingDate > today) return null;
+              
+              return (
+                <div>
+                  <Label htmlFor="feeling">Sensación de la Reunión</Label>
+                  <Select
+                    value={meetingForm.feeling}
+                    onValueChange={(value) => setMeetingForm({ ...meetingForm, feeling: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {FEELING_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          <div className="flex items-center gap-2">
+                            <div className={`w-3 h-3 rounded-full ${option.color}`} />
+                            {option.label}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              );
+            })()}
           </div>
 
           <div className="space-y-2">
@@ -1819,7 +1958,7 @@ const handleSaveMeeting = async () => {
                           <div
                               className={`p-2 rounded border ${
                                 /^\s*no identificad[oa]\.?\s*$/i.test(initiative?.initiative_owner ?? '')
-                                  ? 'border-red-500'
+                                  ? 'border-red-500 bg-white'
                                   : 'border-slate-200 bg-white'
                               }`}
                               >
@@ -1833,7 +1972,7 @@ const handleSaveMeeting = async () => {
                           <div
                               className={`p-2 rounded border ${
                                 /^\s*no identificad[oa]\.?\s*$/i.test(initiative?.initiative_cost ?? '')
-                                  ? 'border-red-500'
+                                  ? 'border-red-500 bg-white'
                                   : 'border-slate-200 bg-white'
                               }`}
                               >
@@ -1845,7 +1984,7 @@ const handleSaveMeeting = async () => {
                             <div
                               className={`p-2 rounded border ${
                                 /^\s*no identificad[oa]\.?\s*$/i.test(initiative?.initiative_date ?? '')
-                                  ? 'border-red-500'
+                                  ? 'border-red-500 bg-white'
                                   : 'border-slate-200 bg-white'
                               }`}
                               >
@@ -1860,7 +1999,7 @@ const handleSaveMeeting = async () => {
                           <div
                               className={`p-3 rounded border mt-3 ${
                                 /^\s*no identificad[oa]\.?\s*$/i.test(initiative.initiative_gartner_value ?? '')
-                                  ? 'border-red-500 bg-red-50'
+                                  ? 'border-red-500 bg-white'
                                   : 'border-slate-200 bg-white'
                               }`}
                               >
