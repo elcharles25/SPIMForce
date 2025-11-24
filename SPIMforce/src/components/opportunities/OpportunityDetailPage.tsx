@@ -832,27 +832,24 @@ const handleSaveMeeting = async () => {
 const getPastMeetingDates = (): Date[] => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  return getMeetingDates().filter(date => date < today);
+  return getMeetingDates().filter(date => date <= today);
 };
 
 const getFutureMeetingDates = (): Date[] => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  return getMeetingDates().filter(date => date >= today);
+  return getMeetingDates().filter(date => date > today);
 };
 
 const getMeetingsForDate = (date: Date): Meeting[] => {
-  const dateStr = date.toISOString().split('T')[0];
   return meetings.filter(meeting => {
-    const meetingDateStr = meeting.meeting_date.split(' ')[0];
-    let normalizedDate = '';
-    if (meetingDateStr.includes('/')) {
-      const [day, month, year] = meetingDateStr.split('/');
-      normalizedDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-    } else {
-      normalizedDate = meetingDateStr;
-    }
-    return normalizedDate === dateStr;
+    const meetingDate = new Date(meeting.meeting_date);
+    // Comparar solo año, mes y día (sin horas)
+    return (
+      meetingDate.getFullYear() === date.getFullYear() &&
+      meetingDate.getMonth() === date.getMonth() &&
+      meetingDate.getDate() === date.getDate()
+    );
   });
 };
 
@@ -863,22 +860,19 @@ const handleDateClick = (date: Date | undefined) => {
   
   if (meetingsOnDate.length > 0) {
     toast({
-      title: "Reuniones en esta fecha",
+      title: 'Reuniones en esta fecha',
       description: `${meetingsOnDate.length} reunión(es) registrada(s)`,
     });
   } else {
-    // Formatear fecha sin conversión UTC
+    // Formatear fecha correctamente sin cambio de zona horaria
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     const dateStr = `${year}-${month}-${day}`;
     
     setMeetingForm({
-      contact_id: opportunity?.contact_id || '',
-      meeting_type: '',
+      ...meetingForm,
       meeting_date: dateStr,
-      notes: '',
-      feeling: '',
     });
     setEditingMeeting(null);
     setMeetingDialog(true);
@@ -1451,7 +1445,7 @@ const handleDateClick = (date: Date | undefined) => {
               <div className="border rounded-lg p-4 bg-white">
                 <Calendar
                   mode="single"
-                  selected={calendarDate}
+                  selected={undefined}
                   onSelect={(date) => date && setCalendarDate(date)}
                   onDayClick={handleDateClick}
                   locale={es}
