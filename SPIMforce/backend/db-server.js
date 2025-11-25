@@ -2059,6 +2059,218 @@ app.get('/api/meetings/:id', (req, res) => {
   }
 });
 
+// ==================== ACCOUNTS ====================
+app.get('/api/accounts', (req, res) => {
+  try {
+    const result = db.exec('SELECT * FROM accounts ORDER BY created_at DESC');
+    const rows = rowsToObjects(result);
+    res.json(rows);
+  } catch (error) {
+    console.error('Error obteniendo accounts:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/accounts/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = db.exec('SELECT * FROM accounts WHERE id = ?', [id]);
+    const row = rowToObject(result);
+    if (!row) {
+      return res.status(404).json({ error: 'Cuenta no encontrada' });
+    }
+    res.json(row);
+  } catch (error) {
+    console.error('Error obteniendo account:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/accounts', (req, res) => {
+  try {
+    const id = randomUUID();
+    const { name, full_name, logo, sector, web_site, address, corporative_objectives, org_chart } = req.body;
+
+    db.run(`
+      INSERT INTO accounts (
+        id, name, full_name, logo, sector, web_site, address, corporative_objectives, org_chart,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+    `, [
+      id, 
+      name || null, 
+      full_name || null, 
+      logo || null, 
+      sector || null, 
+      web_site || null, 
+      address || null,
+      corporative_objectives || null,
+      org_chart || null
+    ]);
+
+    saveDB();
+    const result = db.exec('SELECT * FROM accounts WHERE id = ?', [id]);
+    res.status(201).json(rowToObject(result));
+  } catch (error) {
+    console.error('Error creando account:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/accounts/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, full_name, logo, sector, web_site, address, corporative_objectives, org_chart } = req.body;
+
+    db.run(`
+      UPDATE accounts SET
+        name = ?, full_name = ?, logo = ?, sector = ?, web_site = ?, 
+        address = ?, corporative_objectives = ?, org_chart = ?,
+        updated_at = datetime('now')
+      WHERE id = ?
+    `, [
+      name || null,
+      full_name || null,
+      logo || null,
+      sector || null,
+      web_site || null,
+      address || null,
+      corporative_objectives || null,
+      org_chart || null,
+      id
+    ]);
+
+    saveDB();
+    const result = db.exec('SELECT * FROM accounts WHERE id = ?', [id]);
+    const row = rowToObject(result);
+    if (!row) {
+      return res.status(404).json({ error: 'Cuenta no encontrada' });
+    }
+    res.json(row);
+  } catch (error) {
+    console.error('Error actualizando account:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/accounts/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    db.run('DELETE FROM accounts WHERE id = ?', [id]);
+    saveDB();
+    res.json({ success: true, id });
+  } catch (error) {
+    console.error('Error eliminando account:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Endpoint para obtener contactos de una cuenta
+app.get('/api/accounts/:id/contacts', (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = db.exec(`
+      SELECT * FROM contacts 
+      WHERE organization = (SELECT name FROM accounts WHERE id = ?)
+      ORDER BY first_name, last_name
+    `, [id]);
+    res.json(rowsToObjects(result));
+  } catch (error) {
+    console.error('Error obteniendo contactos de la cuenta:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Endpoint para subir logo de cuenta desde base64
+app.post('/api/accounts/:id/logo-base64', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { base64Data } = req.body;
+    
+    if (!base64Data) {
+      return res.status(400).json({ error: 'No se proporcionó imagen' });
+    }
+
+    console.log('📸 Guardando logo de cuenta desde base64...');
+    console.log('   Account ID:', id);
+
+    const result = db.exec('SELECT logo FROM accounts WHERE id = ?', [id]);
+    const currentAccount = rowToObject(result);
+    
+    if (currentAccount && currentAccount.logo) {
+      const oldFilename = currentAccount.logo.split('/').pop();
+      const oldFilepath = path.join(contactPhotosDir, oldFilename);
+      
+      if (fs.existsSync(oldFilepath)) {
+        fs.unlinkSync(oldFilepath);
+        console.log('   🗑️ Logo antiguo eliminado:', oldFilename);
+      }
+    }
+
+    const matches = base64Data.match(/^data:image\/(\w+);base64,(.+)$/);
+    if (!matches) {
+      return res.status(400).json({ error: 'Formato de imagen inválido' });
+    }
+
+    const imageType = matches[1];
+    const imageData = matches[2];
+    const buffer = Buffer.from(imageData, 'base64');
+    
+    const filename = `account-${id}-${Date.now()}.${imageType}`;
+    const filepath = path.join(contactPhotosDir, filename);
+    
+    fs.writeFileSync(filepath, buffer);
+    
+    console.log('   ✅ Archivo guardado:', filename);
+    console.log('   📏 Tamaño:', buffer.length, 'bytes');
+
+    const logoUrl = `/contact-photos/${filename}`;
+    
+    db.run('UPDATE accounts SET logo = ?, updated_at = datetime(\'now\') WHERE id = ?', [logoUrl, id]);
+    saveDB();
+    
+    console.log('   💾 Base de datos actualizada con logo:', logoUrl);
+    
+    res.json({
+      success: true,
+      logo: logoUrl,
+      filename: filename
+    });
+  } catch (error) {
+    console.error('❌ Error guardando logo:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Eliminar logo de cuenta
+app.delete('/api/accounts/:id/logo', (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const result = db.exec('SELECT logo FROM accounts WHERE id = ?', [id]);
+    const row = rowToObject(result);
+    
+    if (row && row.logo) {
+      const filename = row.logo.split('/').pop();
+      const filepath = path.join(contactPhotosDir, filename);
+      
+      if (fs.existsSync(filepath)) {
+        fs.unlinkSync(filepath);
+        console.log('🗑️ Logo eliminado:', filename);
+      }
+    }
+    
+    db.run('UPDATE accounts SET logo = NULL, updated_at = datetime(\'now\') WHERE id = ?', [id]);
+    saveDB();
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('❌ Error eliminando logo:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
 const PORT = process.env.PORT || 3001;
 
 initDB().then(() => {

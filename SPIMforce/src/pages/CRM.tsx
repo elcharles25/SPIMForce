@@ -149,9 +149,12 @@ const CRM = () => {
     last_email_check: "",
   });
 
+  const [accounts, setAccounts] = useState<any[]>([]);
+
   useEffect(() => {
     fetchContacts();
     fetchCampaignTypes();
+    fetchAccounts();
   }, []);
 
   const fetchContacts = async () => {
@@ -202,6 +205,15 @@ const CRM = () => {
       console.error('Error cargando templates:', error);
     }
   };
+
+  const fetchAccounts = async () => {
+  try {
+    const data = await db.getAccounts();
+    setAccounts(data);
+  } catch (error) {
+    console.error('Error cargando cuentas:', error);
+  }
+};
 
 const getFilteredContacts = () => {
   return contacts.filter((contact) => {
@@ -676,12 +688,45 @@ const getFilteredContacts = () => {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="organization">Organización *</Label>
-                      <Input
-                        id="organization"
-                        value={formData.organization}
-                        onChange={(e) => setFormData({ ...formData, organization: e.target.value })}
-                        required
-                      />
+                      <div className="flex gap-2">
+                        <Select
+                          value={formData.organization}
+                          onValueChange={(value) => setFormData({ ...formData, organization: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Seleccionar organización" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {accounts.length === 0 ? (
+                              <SelectItem value="" disabled>
+                                No hay cuentas disponibles
+                              </SelectItem>
+                            ) : (
+                              accounts.map((account) => (
+                                <SelectItem key={account.id} value={account.name}>
+                                  {account.name}
+                                </SelectItem>
+                              ))
+                            )}
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          onClick={() => {
+                            window.open('/accounts', '_blank');
+                          }}
+                          title="Crear nueva cuenta"
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      {accounts.length === 0 && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Crea primero una cuenta en el módulo de Cuentas
+                        </p>
+                      )}
                     </div>
                     <div>
                       <Label htmlFor="first_name">Nombre *</Label>

@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, Target, CalendarCheck, Briefcase, Settings } from "lucide-react";
+import { LayoutDashboard, Users, Target, CalendarCheck, Briefcase, Settings, Building2 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import {
   Sidebar,
@@ -15,6 +15,7 @@ import {
 
 const mainItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
+  { title: "Cuentas", url: "/accounts", icon: Building2 },
   { title: "Contactos", url: "/crm", icon: Users }, 
   { title: "Campañas", url: "/campaigns", icon: Target },
   { title: "Oportunidades", url: "/opportunities", icon: Briefcase },

@@ -345,6 +345,53 @@ export class DatabaseAdapter {
     return res.json();
   }
 
+  // ==================== ACCOUNTS ====================
+  async getAccounts() {
+    const res = await fetch(`${API_URL}/api/accounts`);
+    if (!res.ok) throw new Error('Error obteniendo accounts');
+    return res.json();
+  }
+
+  async getAccount(id: string) {
+    const res = await fetch(`${API_URL}/api/accounts/${id}`);
+    if (!res.ok) throw new Error('Error obteniendo account');
+    return res.json();
+  }
+
+  async createAccount(account: any) {
+    const res = await fetch(`${API_URL}/api/accounts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(account)
+    });
+    if (!res.ok) throw new Error('Error creando account');
+    return res.json();
+  }
+
+  async updateAccount(id: string, account: any) {
+    const res = await fetch(`${API_URL}/api/accounts/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(account)
+    });
+    if (!res.ok) throw new Error('Error actualizando account');
+    return res.json();
+  }
+
+  async deleteAccount(id: string) {
+    const res = await fetch(`${API_URL}/api/accounts/${id}`, {
+      method: 'DELETE'
+    });
+    if (!res.ok) throw new Error('Error eliminando account');
+    return res.json();
+  }
+
+  async getAccountContacts(accountId: string) {
+    const res = await fetch(`${API_URL}/api/accounts/${accountId}/contacts`);
+    if (!res.ok) throw new Error('Error obteniendo contactos de la cuenta');
+    return res.json();
+  }
+
   // ==================== UTILS ====================
   async testConnection() {
     const res = await fetch(`${API_URL}/api/health`);

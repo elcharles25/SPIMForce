@@ -17,6 +17,8 @@ import OpportunityDetailPage from "./components/opportunities/OpportunityDetailP
 import ContactDetailPage from "@/components/contacts/ContactDetailPage";
 import MeetingDetailPage from "@/components/meetings/MeetingDetailPage";
 import CampaignDetailPage from "@/components/campaigns/CampaignDetailPage";
+import Accounts from '@/pages/Accounts';
+import AccountDetailPage from '@/components/accounts/AccountDetailPage';
 import "@/app.css";
 
 const queryClient = new QueryClient();
@@ -35,6 +37,8 @@ const AppContent = () => {
           </header>
           <Routes>
             <Route path="/" element={<Dashboard />} />
+            <Route path="/accounts" element={<Accounts />} />
+            <Route path="/accounts/:id" element={<AccountDetailPage />} />
             <Route path="/crm" element={<CRM />} />
             <Route path="/crm/:id" element={<ContactDetailPage />} />
             <Route path="/campaigns" element={<Campaigns />} />
