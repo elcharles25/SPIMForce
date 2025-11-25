@@ -730,29 +730,37 @@ const handleGenerateFollowUp = async () => {
     }
   };
 
-  const handleOpenMeetingDialog = (meeting?: Meeting) => {
-    if (meeting) {
-      setEditingMeeting(meeting);
-      const dateStr = meeting.meeting_date.split(' ')[0].split('/').reverse().join('-');
-      setMeetingForm({
-        contact_id: meeting.contact_id || '',
-        meeting_type: meeting.meeting_type,
-        meeting_date: dateStr,
-        notes: meeting.notes || '',
-        feeling: meeting.feeling || '',
+const handleOpenMeetingDialog = (meeting?: Meeting) => {
+  if (meeting) {
+    setEditingMeeting(meeting);
+    const dateStr = meeting.meeting_date.split(' ')[0].split('/').reverse().join('-');
+    setMeetingForm({
+      contact_id: meeting.contact_id || '',
+      meeting_type: meeting.meeting_type,
+      meeting_date: dateStr,
+      notes: meeting.notes || '',
+      feeling: meeting.feeling || '',
+    });
+  } else {
+    setEditingMeeting(null);
+    if (!opportunity?.contact_id) {
+      toast({
+        title: 'Error',
+        description: 'No se pudo obtener el contacto de la oportunidad',
+        variant: 'destructive',
       });
-    } else {
-      setEditingMeeting(null);
-      setMeetingForm({
-        contact_id: opportunity?.contact_id || '',
-        meeting_type: '',
-        meeting_date: '',
-        notes: '',
-        feeling: '',
-      });
+      return;
     }
-    setMeetingDialog(true);
-  };
+    setMeetingForm({
+      contact_id: opportunity.contact_id,
+      meeting_type: '',
+      meeting_date: '',
+      notes: '',
+      feeling: '',
+    });
+  }
+  setMeetingDialog(true);
+};
 
 const handleSaveMeeting = async () => {
   if (!meetingForm.meeting_type || !meetingForm.meeting_date || !meetingForm.contact_id) {
@@ -864,15 +872,28 @@ const handleDateClick = (date: Date | undefined) => {
       description: `${meetingsOnDate.length} reunión(es) registrada(s)`,
     });
   } else {
+    if (!opportunity?.contact_id) {
+      toast({
+        title: 'Error',
+        description: 'No se pudo obtener el contacto de la oportunidad',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
     // Formatear fecha correctamente sin cambio de zona horaria
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     const dateStr = `${year}-${month}-${day}`;
     
+    // ⭐ ESTABLECER TODOS LOS CAMPOS EXPLÍCITAMENTE
     setMeetingForm({
-      ...meetingForm,
+      contact_id: opportunity.contact_id,  // ⭐ Explícitamente desde opportunity
+      meeting_type: '',
       meeting_date: dateStr,
+      notes: '',
+      feeling: '',
     });
     setEditingMeeting(null);
     setMeetingDialog(true);
@@ -1676,6 +1697,12 @@ const handleDateClick = (date: Date | undefined) => {
               {editingMeeting ? 'Editar Reunión' : 'Nueva Reunión'}
             </DialogTitle>
           </DialogHeader>
+          {/* ⭐ Agregar esto para debug - puedes quitarlo después */}
+          {!editingMeeting && (
+            <div className="text-xs text-slate-500 mb-2">
+              Contacto: {meetingForm.contact_id || '⚠️ NO ESTABLECIDO'}
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label htmlFor="meeting_type">Tipo de Reunión *</Label>
