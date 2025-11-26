@@ -1066,7 +1066,9 @@ const handleContactSelect = (nodeId: string, contactId: string) => {
                     <TableRow
                       key={contact.id}
                       className="cursor-pointer hover:bg-slate-50"
-                      onClick={() => navigate(`/contacts/${contact.id}`)}
+                        onClick={() => navigate(`/contacts/${contact.id}`, { 
+                          state: { from: 'account', accountId: id } 
+                        })}
                     >
                       <TableCell className="font-medium">
                         {contact.first_name} {contact.last_name}

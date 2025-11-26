@@ -27,7 +27,7 @@ const queryClient = new QueryClient();
 const AppContent = () => {
   useAutoCampaignSender(); 
 
-  return (
+  return (  
     <SidebarProvider>
       <div className="min-h-screen flex w-full">
         <AppSidebar />

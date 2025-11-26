@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { db } from '@/lib/db-adapter';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -300,6 +300,9 @@ const [formData, setFormData] = useState({
       future_value: string;
     }>>([]);
 
+    const location = useLocation();
+    const fromAccount = location.state?.from === 'account';
+    const accountId = location.state?.accountId;
     const [valueAnalysisDialog, setValueAnalysisDialog] = useState(false);
     const [selectedValueInitiative, setSelectedValueInitiative] = useState<any>(null);
     const [valueInitiativeDetailDialog, setValueInitiativeDetailDialog] = useState(false);
@@ -1098,11 +1101,11 @@ const handleShowMore = () => {
     <div className="container mx-auto py-6 px-4">
       <Button
         variant="ghost"
-        onClick={() => navigate('/crm')}
+        onClick={() => navigate(fromAccount ? `/accounts/${accountId}` : '/crm')}
         className="mb-4"
       >
         <ArrowLeft className="mr-2 h-4 w-4" />
-        Volver a Contactos
+        {fromAccount ? 'Volver a la cuenta' : 'Volver a Contactos'}
       </Button>
 
       {/* HEADER CON FOTO Y DATOS DEL CONTACTO */}
