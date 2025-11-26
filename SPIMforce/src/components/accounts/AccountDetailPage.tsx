@@ -22,6 +22,11 @@ import {
   Building2,
   User,
   Image as ImageIcon,
+  Network,
+  Plus,
+  Save,
+  X,
+  GitBranch,
 } from 'lucide-react';
 import {
   Table,
@@ -67,6 +72,24 @@ interface CorporativeObjective {
   title: string;
   description: string;
   completion_date: string;
+}
+
+interface OrgChartNode {
+  id: string;
+  name: string;
+  role: string;
+  x: number;
+  y: number;
+}
+
+interface OrgChartConnection {
+  from: string;
+  to: string;
+}
+
+interface OrgChartData {
+  nodes: OrgChartNode[];
+  connections: OrgChartConnection[];
 }
 
 const analyzeWithGemini = async (contacts: Contact[], accountName: string): Promise<string> => {
@@ -155,6 +178,8 @@ export default function AccountDetailPage() {
   const { id } = useParams();
   const { toast } = useToast();
   const logoDropZoneRef = useRef<HTMLDivElement>(null);
+  const orgChartRef = useRef<HTMLDivElement>(null);
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const [account, setAccount] = useState<Account | null>(null);
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -166,6 +191,14 @@ export default function AccountDetailPage() {
 
   const [objectives, setObjectives] = useState<CorporativeObjective[]>([]);
   const [lastObjectivesUpdate, setLastObjectivesUpdate] = useState<string | null>(null);
+
+  const [orgChartData, setOrgChartData] = useState<OrgChartData>({ nodes: [], connections: [] });
+  const [selectedNode, setSelectedNode] = useState<string | null>(null);
+  const [draggingNode, setDraggingNode] = useState<string | null>(null);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [connectingFrom, setConnectingFrom] = useState<string | null>(null);
+  const [editingNode, setEditingNode] = useState<string | null>(null);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -192,6 +225,39 @@ export default function AccountDetailPage() {
       }
     }
   }, [account]);
+
+  useEffect(() => {
+    if (account && account.org_chart) {
+      try {
+        const parsed = JSON.parse(account.org_chart);
+        setOrgChartData(parsed);
+        setIsInitialLoad(false);
+      } catch (error) {
+        console.error('Error cargando organigrama:', error);
+        setIsInitialLoad(false);
+      }
+    } else {
+      setIsInitialLoad(false);
+    }
+  }, [account]);
+
+  useEffect(() => {
+    if (isInitialLoad || !account) return;
+
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    saveTimeoutRef.current = setTimeout(() => {
+      autoSaveOrgChart();
+    }, 1000);
+
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, [orgChartData, isInitialLoad, account]);
 
   useEffect(() => {
     const handlePaste = async (e: ClipboardEvent) => {
@@ -222,6 +288,22 @@ export default function AccountDetailPage() {
       }
     };
   }, [account]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (editingNode && orgChartRef.current) {
+        const editingElement = document.getElementById(`editing-${editingNode}`);
+        if (editingElement && !editingElement.contains(e.target as Node)) {
+          setEditingNode(null);
+        }
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [editingNode]);
 
   const loadData = async () => {
     try {
@@ -379,6 +461,135 @@ export default function AccountDetailPage() {
     }
   };
 
+  const autoSaveOrgChart = async () => {
+    if (!account) return;
+
+    try {
+      const updatedAccount = {
+        ...account,
+        org_chart: JSON.stringify(orgChartData),
+      };
+      await db.updateAccount(account.id, updatedAccount);
+    } catch (error) {
+      console.error('Error autoguardando organigrama:', error);
+    }
+  };
+
+  const addOrgNode = () => {
+    const newNode: OrgChartNode = {
+      id: `node-${Date.now()}`,
+      name: '',
+      role: '',
+      x: 20,
+      y: 20,
+    };
+    setOrgChartData({
+      ...orgChartData,
+      nodes: [...orgChartData.nodes, newNode],
+    });
+    setEditingNode(newNode.id);
+    setSelectedNode(newNode.id);
+  };
+
+  const deleteOrgNode = (nodeId: string) => {
+    setOrgChartData({
+      nodes: orgChartData.nodes.filter(n => n.id !== nodeId),
+      connections: orgChartData.connections.filter(c => c.from !== nodeId && c.to !== nodeId),
+    });
+    setSelectedNode(null);
+  };
+
+  const updateOrgNode = (nodeId: string, updates: Partial<OrgChartNode>) => {
+    setOrgChartData({
+      ...orgChartData,
+      nodes: orgChartData.nodes.map(n => n.id === nodeId ? { ...n, ...updates } : n),
+    });
+  };
+
+const handleContactSelect = (nodeId: string, contactId: string) => {
+  console.log('handleContactSelect llamado:', { nodeId, contactId });
+  console.log('Contactos disponibles:', contacts);
+  
+  const selectedContact = contacts.find(c => c.id === contactId);
+  console.log('Contacto encontrado:', selectedContact);
+  
+  if (selectedContact) {
+    const updates = {
+      name: `${selectedContact.first_name} ${selectedContact.last_name}`,
+      role: selectedContact.title
+    };
+    console.log('Actualizando con:', updates);
+    
+    updateOrgNode(nodeId, updates);
+    setEditingNode(null);
+  } else {
+    console.log('NO se encontró el contacto con id:', contactId);
+  }
+};
+
+  const handleNodeMouseDown = (e: React.MouseEvent, nodeId: string) => {
+    if (connectingFrom) {
+      if (connectingFrom !== nodeId) {
+        const connectionExists = orgChartData.connections.some(
+          c => (c.from === connectingFrom && c.to === nodeId) || (c.from === nodeId && c.to === connectingFrom)
+        );
+        
+        if (!connectionExists) {
+          setOrgChartData({
+            ...orgChartData,
+            connections: [...orgChartData.connections, { from: connectingFrom, to: nodeId }],
+          });
+        }
+      }
+      setConnectingFrom(null);
+      return;
+    }
+
+    if (editingNode === nodeId) return;
+
+    const rect = orgChartRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const node = orgChartData.nodes.find(n => n.id === nodeId);
+    if (!node) return;
+
+    setDraggingNode(nodeId);
+    setSelectedNode(nodeId);
+    setDragOffset({
+      x: e.clientX - rect.left - node.x,
+      y: e.clientY - rect.top - node.y,
+    });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!draggingNode) return;
+
+    const rect = orgChartRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const gridSize = 40; // Tamaño de la cuadrícula
+
+    let x = Math.max(0, Math.min(rect.width - 200, e.clientX - rect.left - dragOffset.x));
+    let y = Math.max(0, Math.min(rect.height - 120, e.clientY - rect.top - dragOffset.y));
+
+    // Alinear a la cuadrícula
+    x = Math.round(x / gridSize) * gridSize;
+    y = Math.round(y / gridSize) * gridSize;
+
+    updateOrgNode(draggingNode, { x, y });
+  };
+
+  const handleMouseUp = () => {
+    setDraggingNode(null);
+  };
+
+  const deleteConnection = (from: string, to: string) => {
+    setOrgChartData({
+      ...orgChartData,
+      connections: orgChartData.connections.filter(c => !(c.from === from && c.to === to)),
+    });
+  };
+
   const openEditDialog = () => {
     if (!account) return;
     
@@ -392,36 +603,36 @@ export default function AccountDetailPage() {
     setIsEditDialogOpen(true);
   };
 
-const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
 
-  if (!formData.name) {
-    toast({
-      title: 'Campo obligatorio',
-      description: 'El nombre es obligatorio',
-      variant: 'destructive',
-    });
-    return;
-  }
+    if (!formData.name) {
+      toast({
+        title: 'Campo obligatorio',
+        description: 'El nombre es obligatorio',
+        variant: 'destructive',
+      });
+      return;
+    }
 
-  try {
-    const payload = {
-      ...formData,
-      logo: account?.logo || null,
-    };
-    
-    await db.updateAccount(id!, payload);
-    toast({ title: 'Éxito', description: 'Cuenta actualizada correctamente' });
-    setIsEditDialogOpen(false);
-    loadData();
-  } catch (error) {
-    toast({
-      title: 'Error',
-      description: `Error al actualizar la cuenta: ${error instanceof Error ? error.message : 'Desconocido'}`,
-      variant: 'destructive',
-    });
-  }
-};
+    try {
+      const payload = {
+        ...formData,
+        logo: account?.logo || null,
+      };
+      
+      await db.updateAccount(id!, payload);
+      toast({ title: 'Éxito', description: 'Cuenta actualizada correctamente' });
+      setIsEditDialogOpen(false);
+      loadData();
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: `Error al actualizar la cuenta: ${error instanceof Error ? error.message : 'Desconocido'}`,
+        variant: 'destructive',
+      });
+    }
+  };
 
   const handleDelete = async () => {
     if (!confirm('¿Estás seguro de eliminar esta cuenta?')) return;
@@ -462,59 +673,56 @@ const handleSubmit = async (e: React.FormEvent) => {
         Volver a Cuentas
       </Button>
 
-      {/* HEADER CON LOGO Y DATOS DE LA CUENTA */}
       <div className="flex gap-6 mb-6">
-        {/* LOGO DE LA CUENTA */}
         <div className="h-32 aspect-[2/1] overflow-hidden">
-              <div
-                ref={logoDropZoneRef}
-                tabIndex={0}
-                className={
-                  `relative w-full h-full overflow-hidden 
-                  ${account.logo 
-                      ? ''
-                      : `rounded-2xl border-2 border-dashed 
-                        ${isDraggingLogo ? 'border-indigo-500 bg-indigo-50' : 'border-gray-300 bg-gray-50'}
-                        transition-colors cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/50 focus:outline-none focus:ring-2 focus:ring-indigo-500`
-                  }`
-                }
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-              >
-                {account.logo ? (
-                  <>
-                    <img
-                      src={`http://localhost:3001${account.logo}?t=${Date.now()}`}
-                      alt={account.name}
-                      className="absolute inset-0 w-full h-full object-contain p-1"
-                      key={account.logo}
-                    />
-                    <button
-                      type="button"
-                      className="absolute inset-0 w-full h-full"
-                      onClick={() => {}}
-                      aria-label="Actualizar logo"
-                    />
-                  </>
+          <div
+            ref={logoDropZoneRef}
+            tabIndex={0}
+            className={
+              `relative w-full h-full overflow-hidden 
+              ${account.logo 
+                  ? ''
+                  : `rounded-2xl border-2 border-dashed 
+                    ${isDraggingLogo ? 'border-indigo-500 bg-indigo-50' : 'border-gray-300 bg-gray-50'}
+                    transition-colors cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/50 focus:outline-none focus:ring-2 focus:ring-indigo-500`
+              }`
+            }
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
+            {account.logo ? (
+              <>
+                <img
+                  src={`http://localhost:3001${account.logo}?t=${Date.now()}`}
+                  alt={account.name}
+                  className="absolute inset-0 w-full h-full object-contain p-1"
+                  key={account.logo}
+                />
+                <button
+                  type="button"
+                  className="absolute inset-0 w-full h-full"
+                  onClick={() => {}}
+                  aria-label="Actualizar logo"
+                />
+              </>
+            ) : (
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400">
+                {uploadingLogo ? (
+                  <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
                 ) : (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400">
-                    {uploadingLogo ? (
-                      <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
-                    ) : (
-                      <>
-                        <ImageIcon className="h-8 w-8" />
-                        <p className="text-xs text-center px-2 mt-2">
-                          Pega o arrastra un logo
-                        </p>
-                      </>
-                    )}
-                  </div>
+                  <>
+                    <ImageIcon className="h-8 w-8" />
+                    <p className="text-xs text-center px-2 mt-2">
+                      Pega o arrastra un logo
+                    </p>
+                  </>
                 )}
               </div>
+            )}
+          </div>
         </div>
 
-        {/* INFORMACIÓN PRINCIPAL DE LA CUENTA */}
         <div className="flex-1">
           <div className="flex justify-between items-start mb-3">
             <div>
@@ -525,10 +733,10 @@ const handleSubmit = async (e: React.FormEvent) => {
                 <p className="text-xl text-slate-600 mt-1">{account.full_name}</p>
               )}
               {account.sector && (
-              <div className="text-sm flex text-slate-500 items-center mt-1 italic">
+                <div className="text-sm flex text-slate-500 items-center mt-1 italic">
                   {account.sector}
-              </div>
-            )}
+                </div>
+              )}
             </div>
             <Button 
               variant="outline"
@@ -554,24 +762,23 @@ const handleSubmit = async (e: React.FormEvent) => {
                 </a>
               </div>
             )}
-        {account.address && (
-        <div className="flex items-center gap-2">
-            <MapPin className="h-4 w-4 text-indigo-600" />
-            <a
-            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(account.address)}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-blue-600 hover:underline"
-            >
-            {account.address}
-            </a>
-        </div>
-        )}
+            {account.address && (
+              <div className="flex items-center gap-2">
+                <MapPin className="h-4 w-4 text-indigo-600" />
+                <a
+                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(account.address)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 hover:underline"
+                >
+                  {account.address}
+                </a>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* ANÁLISIS CON IA */}
       <Card className="mb-6 bg-gradient-to-br from-indigo-50/20 to-indigo-100/50 border-indigo-200 shadow-sm rounded-2xl">
         <CardHeader className="pb-4">
           <CardTitle className="flex items-center gap-2 text-lg font-semibold text-slate-800">
@@ -647,7 +854,189 @@ const handleSubmit = async (e: React.FormEvent) => {
         </CardContent>
       </Card>
 
-      {/* CONTACTOS ASOCIADOS */}
+      <Card className="mb-6 shadow-sm rounded-2xl">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+              <Network className="h-5 w-5 text-indigo-600" />
+              Organigrama de la Compañía
+            </CardTitle>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={addOrgNode}
+                className="rounded-full"
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Añadir Persona
+              </Button>
+              {connectingFrom && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setConnectingFrom(null)}
+                  className="rounded-full bg-red-50 text-red-600 hover:bg-red-100"
+                >
+                  <X className="h-4 w-4 mr-1" />
+                  Cancelar Conexión
+                </Button>
+              )}
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div
+            ref={orgChartRef}
+            className="relative w-full h-[600px] bg-slate-50 rounded-lg border-2 border-slate-200 overflow-hidden"
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setSelectedNode(null);
+                setConnectingFrom(null);
+              }
+            }}
+          >
+            <svg className="absolute inset-0 w-full h-full pointer-events-none">
+              {orgChartData.connections.map((conn, idx) => {
+                const fromNode = orgChartData.nodes.find(n => n.id === conn.from);
+                const toNode = orgChartData.nodes.find(n => n.id === conn.to);
+                
+                if (!fromNode || !toNode) return null;
+
+                const x1 = fromNode.x + 100;
+                const y1 = fromNode.y + 40;
+                const x2 = toNode.x + 100;
+                const y2 = toNode.y + 40;
+
+                const midY = (y1 + y2) / 2;
+
+                return (
+                  <g key={idx}>
+                    <path
+                      d={`M ${x1} ${y1} L ${x1} ${midY} L ${x2} ${midY} L ${x2} ${y2}`}
+                      stroke="#6366f1"
+                      strokeWidth="2"
+                      fill="none"
+                      className="pointer-events-auto cursor-pointer hover:stroke-red-500"
+                      onClick={() => deleteConnection(conn.from, conn.to)}
+                    />
+                    <circle cx={x1} cy={y1} r="4" fill="#6366f1" />
+                    <circle cx={x2} cy={y2} r="4" fill="#6366f1" />
+                  </g>
+                );
+              })}
+            </svg>
+
+            {orgChartData.nodes.map((node) => (
+              <div
+                key={node.id}
+                className={`absolute w-[200px] bg-white rounded-lg border-2 shadow-md transition-all cursor-move ${
+                  selectedNode === node.id
+                    ? 'border-indigo-500 shadow-lg scale-105'
+                    : 'border-slate-300 hover:border-indigo-400'
+                } ${connectingFrom === node.id ? 'ring-4 ring-indigo-300' : ''}`}
+                style={{
+                  left: `${node.x}px`,
+                  top: `${node.y}px`,
+                }}
+                onMouseDown={(e) => handleNodeMouseDown(e, node.id)}
+              >
+                <div className="p-3 md:p-3">
+                  {editingNode === node.id ? (
+                    <div id={`editing-${node.id}`} className="space-y-2" onClick={(e) => e.stopPropagation()}>
+                      <select
+                          className="w-full h-8 text-sm font-semibold border rounded px-2"
+                          value=""
+                          onChange={(e) => {
+                            console.log('onChange disparado:', e.target.value);
+                            handleContactSelect(node.id, e.target.value);
+                          }}
+                        >
+                          <option value="">Seleccionar contacto</option>
+                          {contacts
+                            .filter((contact) => {
+                              const fullName = `${contact.first_name} ${contact.last_name}`;
+                              return !orgChartData.nodes.some(n => n.name === fullName && n.id !== node.id);
+                            })
+                            .map((contact) => (
+                              <option key={contact.id} value={contact.id}>
+                                {contact.first_name} {contact.last_name}
+                              </option>
+                            ))}
+                        </select>
+                      {node.role && (
+                        <p className="text-sm text-slate-500 text-center italic">
+                          {node.role}
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <>
+                      <div
+                        className="mb-2 text-center"
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          setEditingNode(node.id);
+                        }}
+                      >
+                        <p className="font-semibold text-sm text-slate-800 truncate">
+                          {node.name || 'Sin nombre'}
+                        </p>
+                        <p className="text-sm text-slate-500 truncate italic">{node.role || 'Sin rol'}</p>
+                      </div>
+                      {selectedNode === node.id && (
+                        <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setConnectingFrom(node.id)}
+                            className="flex-1 h-7 text-xs"
+                            disabled={connectingFrom === node.id}
+                          >
+                            <GitBranch className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => deleteOrgNode(node.id)}
+                            className="h-7 px-2 text-red-600 hover:bg-red-50"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            ))}
+
+            {orgChartData.nodes.length === 0 && (
+              <div className="absolute inset-0 flex items-center justify-center text-slate-400">
+                <div className="text-center">
+                  <Network className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                  <p className="text-sm">Haz clic en "Añadir Persona" para comenzar</p>
+                  <p className="text-xs mt-1">
+                    Selecciona contactos, arrastra las cajas, haz doble clic para editar
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {connectingFrom && (
+            <div className="mt-3 p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
+              <p className="text-sm text-indigo-700">
+                <strong>Modo conexión activo:</strong> Haz clic en otra persona para crear una conexión
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       <Card className="shadow-sm rounded-2xl">
         <CardHeader>
           <CardTitle className="text-lg font-semibold text-slate-800 flex items-center gap-2">
@@ -717,7 +1106,6 @@ const handleSubmit = async (e: React.FormEvent) => {
         </CardContent>
       </Card>
 
-      {/* DIALOG DE EDICIÓN */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
@@ -725,20 +1113,20 @@ const handleSubmit = async (e: React.FormEvent) => {
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
             {account?.logo && (
-                <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-lg border">
-                    <img
-                    src={`http://localhost:3001${account.logo}`}
-                    alt="Logo actual"
-                    className="h-16 w-16 object-contain"
-                    />
-                    <div className="flex-1">
-                    <p className="text-sm font-medium text-slate-700">Logo actual</p>
-                    <p className="text-xs text-slate-500">
-                        Puedes cambiar el logo desde la zona de arrastrar/pegar en la página principal
-                    </p>
-                    </div>
+              <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-lg border">
+                <img
+                  src={`http://localhost:3001${account.logo}`}
+                  alt="Logo actual"
+                  className="h-16 w-16 object-contain"
+                />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-slate-700">Logo actual</p>
+                  <p className="text-xs text-slate-500">
+                    Puedes cambiar el logo desde la zona de arrastrar/pegar en la página principal
+                  </p>
                 </div>
-                )}
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="name">Nombre *</Label>
@@ -760,15 +1148,15 @@ const handleSubmit = async (e: React.FormEvent) => {
               <div>
                 <Label htmlFor="sector">Sector</Label>
                 <Select
-                    value={formData.sector}
-                    onValueChange={(value) =>
+                  value={formData.sector}
+                  onValueChange={(value) =>
                     setFormData({ ...formData, sector: value })
-                    }
+                  }
                 >
-                    <SelectTrigger>
+                  <SelectTrigger>
                     <SelectValue placeholder="Seleccionar sector" />
-                    </SelectTrigger>
-                    <SelectContent>
+                  </SelectTrigger>
+                  <SelectContent>
                     <SelectItem value="Banking and Finance">Banking and Finance</SelectItem>
                     <SelectItem value="Insurance">Insurance</SelectItem>
                     <SelectItem value="Energy and Utilities">Energy and Utilities</SelectItem>
@@ -777,9 +1165,9 @@ const handleSubmit = async (e: React.FormEvent) => {
                     <SelectItem value="Healthcare">Healthcare</SelectItem>
                     <SelectItem value="Retail">Retail</SelectItem>
                     <SelectItem value="Services">Services</SelectItem>
-                    </SelectContent>
+                  </SelectContent>
                 </Select>
-                </div>
+              </div>
               <div>
                 <Label htmlFor="web_site">Sitio Web</Label>
                 <Input
