@@ -603,8 +603,14 @@ const Dashboard = () => {
                 Todavía no has creado ningún contacto
               </h3>
               <p className="text-muted-foreground text-center mb-6 max-w-xl">
-                Crea un contacto para empezar a ver información en el dashboard y comenzar a gestionar tus campañas y oportunidades
+                Crea una cuenta y un contacto para empezar a ver información en el dashboard y comenzar a gestionar tus campañas y oportunidades
               </p>
+              <button
+                onClick={() => navigate('/accounts')}
+                className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium"
+              >
+                Ir a Cuentas
+              </button>
               <button
                 onClick={() => navigate('/crm')}
                 className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium"

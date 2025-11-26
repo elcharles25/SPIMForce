@@ -220,6 +220,22 @@ function createDatabase() {
         )`
       },
       {
+      name: 'accounts',
+        sql: `CREATE TABLE IF NOT EXISTS accounts (
+          id TEXT PRIMARY KEY,
+          name TEXT,
+          full_name TEXT,
+          logo TEXT,
+          sector TEXT,
+          web_site TEXT,
+          address TEXT,
+          corporative_objectives TEXT,
+          org_chart TEXT,
+          created_at TEXT DEFAULT (datetime('now')),
+          updated_at TEXT DEFAULT (datetime('now'))
+        )`
+      },
+      {
         name: 'campaigns',
         sql: `CREATE TABLE IF NOT EXISTS campaigns (
           id TEXT PRIMARY KEY,
