@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+import { formatDateTime } from '@/utils/dateFormatter';
 import {
   Sparkles,
   TrendingUp,
@@ -65,6 +66,7 @@ interface Contact {
   title: string;
   contact_type: string;
   email: string;
+  last_contact_date: string;
   phone: string | null;
 }
 
@@ -633,7 +635,7 @@ const handleContactSelect = (nodeId: string, contactId: string) => {
       });
     }
   };
-
+  
   const handleDelete = async () => {
     if (!confirm('¿Estás seguro de eliminar esta cuenta?')) return;
 
@@ -1058,7 +1060,7 @@ const handleContactSelect = (nodeId: string, contactId: string) => {
                     <TableHead>Título</TableHead>
                     <TableHead>Tipo de Contacto</TableHead>
                     <TableHead>Email</TableHead>
-                    <TableHead>Teléfono</TableHead>
+                    <TableHead>Último contacto</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1098,7 +1100,29 @@ const handleContactSelect = (nodeId: string, contactId: string) => {
                           {contact.email}
                         </a>
                       </TableCell>
-                      <TableCell>{contact.phone || '-'}</TableCell>
+                    <TableCell>
+                      {(() => {
+                        if (!contact.last_contact_date) return '-';
+                        
+                        // Parsear fecha en formato DD/MM/YYYY HH:MM
+                        const [datePart] = contact.last_contact_date.split(' ');
+                        const [day, month, year] = datePart.split('/');
+                        const lastContactDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+                        
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        lastContactDate.setHours(0, 0, 0, 0);
+                        
+                        const diffDays = Math.floor((today.getTime() - lastContactDate.getTime()) / (1000 * 60 * 60 * 24));
+                        const isOld = diffDays > 60;
+                        
+                        return (
+                          <span className={`px-2 py-1 rounded ${isOld ? 'bg-yellow-200' : ''}`}>
+                            {formatDateTime(contact.last_contact_date)}
+                          </span>
+                        );
+                      })()}
+                    </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

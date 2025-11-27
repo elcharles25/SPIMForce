@@ -701,12 +701,28 @@ const loadData = async () => {
       setLoading(true);
       setMeeetingsLoading(true);
       
-      // Primero cargar todos los datos
       const [contactData, meetingsData, allOpportunities] = await Promise.all([
         db.getContact(id!),
         db.getMeetingsByContact(id!),
         db.getOpportunities(),
       ]);
+      
+      // Calcular la fecha de la última interacción
+      if (meetingsData.length > 0) {
+        const sortedMeetings = [...meetingsData].sort((a, b) => 
+          new Date(b.meeting_date).getTime() - new Date(a.meeting_date).getTime()
+        );
+        const lastMeetingDate = sortedMeetings[0].meeting_date;
+        
+        // Actualizar last_contact_date si es diferente
+        if (contactData.last_contact_date !== lastMeetingDate) {
+          await db.updateContact(id!, { 
+            ...contactData, 
+            last_contact_date: lastMeetingDate 
+          });
+          contactData.last_contact_date = lastMeetingDate;
+        }
+      }
       
       setContact(contactData);
       setMeetings(meetingsData);
@@ -716,10 +732,8 @@ const loadData = async () => {
       );
       setOpportunities(contactOpportunities);
       
-      // Terminar el loading para que se muestren los datos
       setLoading(false);
       
-      // Ahora, con los datos ya cargados y mostrados, importar emails en background
       if (contactData) {
         try {
           const response = await fetch('http://localhost:3002/api/contacts/import-received-emails', {
@@ -735,12 +749,9 @@ const loadData = async () => {
           const data = await response.json();
 
           if (data.success && data.importedCount > 0) {
-            // IMPORTANTE: Solo recargar las reuniones, NO el contacto
-            // Esto evita sobrescribir cambios recientes (como fotos)
             const updatedMeetings = await db.getMeetingsByContact(id!);
             setMeetings(updatedMeetings);
           }
-          // Terminar de cargar las reuniones
           setMeeetingsLoading(false);
 
         } catch (error) {

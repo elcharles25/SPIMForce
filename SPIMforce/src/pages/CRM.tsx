@@ -157,23 +157,58 @@ const CRM = () => {
     fetchAccounts();
   }, []);
 
-  const fetchContacts = async () => {
-    try {
-      const data = await db.getContacts();
-      const normalized = data.map((row: any) => ({
-        ...row,
-        webinar_role: row.webinar_role ?? ""
-      }));
-      setContacts(normalized);
-    } catch (error) {
-      console.error('Error cargando contactos:', error);
-      toast({ 
-        title: "Error", 
-        description: "No se pudieron cargar los contactos", 
-        variant: "destructive" 
-      });
-    }
-  };
+const fetchContacts = async () => {
+  try {
+    const data = await db.getContacts();
+    const normalized = data.map((row: any) => ({
+      ...row,
+      webinar_role: row.webinar_role ?? ""
+    }));
+    
+    // Mostrar contactos inmediatamente
+    setContacts(normalized);
+    
+    // Actualizar last_contact_date en segundo plano
+    (async () => {
+      for (const contact of normalized) {
+        try {
+          const meetings = await db.getMeetingsByContact(contact.id);
+          
+          if (meetings.length > 0) {
+            const sortedMeetings = [...meetings].sort((a, b) => 
+              new Date(b.meeting_date).getTime() - new Date(a.meeting_date).getTime()
+            );
+            const lastMeetingDate = sortedMeetings[0].meeting_date;
+            
+            if (contact.last_contact_date !== lastMeetingDate) {
+              await db.updateContact(contact.id, { 
+                ...contact, 
+                last_contact_date: lastMeetingDate 
+              });
+              
+              // Actualizar el estado para reflejar el cambio
+              setContacts(prev => prev.map(c => 
+                c.id === contact.id 
+                  ? { ...c, last_contact_date: lastMeetingDate }
+                  : c
+              ));
+            }
+          }
+        } catch (error) {
+          console.error(`Error actualizando last_contact_date para contacto ${contact.id}:`, error);
+        }
+      }
+    })();
+    
+  } catch (error) {
+    console.error('Error cargando contactos:', error);
+    toast({ 
+      title: "Error", 
+      description: "No se pudieron cargar los contactos", 
+      variant: "destructive" 
+    });
+  }
+};
 
   const handleCSMChange = (selectedName: string) => {
     const selectedCSM = CSM_LIST.find(csm => csm.csm_name === selectedName);
