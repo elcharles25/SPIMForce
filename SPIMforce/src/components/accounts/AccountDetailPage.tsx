@@ -329,6 +329,43 @@ export default function AccountDetailPage() {
     }
   };
 
+  const getContactById = (name: string) => {
+    return contacts.find(c => `${c.first_name} ${c.last_name}` === name);
+  };
+
+  const getNodeStyles = (nodeName: string) => {
+    const contact = getContactById(nodeName);
+    if (!contact) return { borderColor: 'border-slate-300', bgColor: '' };
+
+    // Calcular si el último contacto es mayor a 2 meses
+    let isOldContact = false;
+    if (contact.last_contact_date) {
+      const [datePart] = contact.last_contact_date.split(' ');
+      const [day, month, year] = datePart.split('/');
+      const lastContactDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      lastContactDate.setHours(0, 0, 0, 0);
+      const diffDays = Math.floor((today.getTime() - lastContactDate.getTime()) / (1000 * 60 * 60 * 24));
+      isOldContact = diffDays > 60;
+    }
+
+    // Determinar color del borde según tipo de contacto
+    let borderColor = 'border-slate-300';
+    if (contact.contact_type === 'Cliente' || contact.contact_type === 'Cliente proxy') {
+      borderColor = 'border-green-500';
+    } else if (contact.contact_type === 'Prospect') {
+      borderColor = 'border-yellow-500';
+    } else if (contact.contact_type === 'Oportunidad') {
+      borderColor = 'border-blue-500';
+    }
+
+    return {
+      borderColor,
+      bgColor: isOldContact ? 'bg-yellow-100' : 'bg-white'
+    };
+  };
+
   const handleLogoUpload = async (file: File) => {
     if (!account) return;
     
@@ -663,7 +700,7 @@ const handleContactSelect = (nodeId: string, contactId: string) => {
       </div>
     );
   }
-
+  
   return (
     <div className="container mx-auto py-6 px-4">
       <Button
@@ -919,103 +956,106 @@ const handleContactSelect = (nodeId: string, contactId: string) => {
                   <g key={idx}>
                     <path
                       d={`M ${x1} ${y1} L ${x1} ${midY} L ${x2} ${midY} L ${x2} ${y2}`}
-                      stroke="#6366f1"
+                      stroke="#b8b8b8ff"
                       strokeWidth="2"
                       fill="none"
                       className="pointer-events-auto cursor-pointer hover:stroke-red-500"
                       onClick={() => deleteConnection(conn.from, conn.to)}
                     />
-                    <circle cx={x1} cy={y1} r="4" fill="#6366f1" />
-                    <circle cx={x2} cy={y2} r="4" fill="#6366f1" />
+                    <circle cx={x1} cy={y1} r="4" fill="#b8b8b8ff" />
+                    <circle cx={x2} cy={y2} r="4" fill="#b8b8b8ff" />
                   </g>
                 );
               })}
             </svg>
 
-            {orgChartData.nodes.map((node) => (
-              <div
-                key={node.id}
-                className={`absolute w-[200px] bg-white rounded-lg border-2 shadow-md transition-all cursor-move ${
-                  selectedNode === node.id
-                    ? 'border-indigo-500 shadow-lg scale-105'
-                    : 'border-slate-300 hover:border-indigo-400'
-                } ${connectingFrom === node.id ? 'ring-4 ring-indigo-300' : ''}`}
-                style={{
-                  left: `${node.x}px`,
-                  top: `${node.y}px`,
-                }}
-                onMouseDown={(e) => handleNodeMouseDown(e, node.id)}
-              >
-                <div className="p-3 md:p-3">
-                  {editingNode === node.id ? (
-                    <div id={`editing-${node.id}`} className="space-y-2" onClick={(e) => e.stopPropagation()}>
-                      <select
-                          className="w-full h-8 text-sm font-semibold border rounded px-2"
-                          value=""
-                          onChange={(e) => {
-                            console.log('onChange disparado:', e.target.value);
-                            handleContactSelect(node.id, e.target.value);
+            {orgChartData.nodes.map((node) => {
+              const nodeStyles = getNodeStyles(node.name);
+              
+              return (
+                <div
+                  key={node.id}
+                  className={`absolute w-[200px] ${nodeStyles.bgColor} rounded-lg border-2 shadow-md transition-all cursor-move ${
+                    selectedNode === node.id
+                      ? `${nodeStyles.borderColor} shadow-lg scale-105`
+                      : `${nodeStyles.borderColor} hover:border-indigo-400`
+                  } ${connectingFrom === node.id ? 'ring-4 ring-indigo-300' : ''}`}
+                  style={{
+                    left: `${node.x}px`,
+                    top: `${node.y}px`,
+                  }}
+                  onMouseDown={(e) => handleNodeMouseDown(e, node.id)}
+                >
+                  <div className="p-3 md:p-3">
+                    {editingNode === node.id ? (
+                      <div id={`editing-${node.id}`} className="space-y-2" onClick={(e) => e.stopPropagation()}>
+                        <select
+                            className="w-full h-8 text-sm font-semibold border rounded px-2"
+                            value=""
+                            onChange={(e) => {
+                              console.log('onChange disparado:', e.target.value);
+                              handleContactSelect(node.id, e.target.value);
+                            }}
+                          >
+                            <option value="">Seleccionar contacto</option>
+                            {contacts
+                              .filter((contact) => {
+                                const fullName = `${contact.first_name} ${contact.last_name}`;
+                                return !orgChartData.nodes.some(n => n.name === fullName && n.id !== node.id);
+                              })
+                              .map((contact) => (
+                                <option key={contact.id} value={contact.id}>
+                                  {contact.first_name} {contact.last_name}
+                                </option>
+                              ))}
+                          </select>
+                        {node.role && (
+                          <p className="text-sm text-slate-500 text-center italic">
+                            {node.role}
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <>
+                        <div
+                          className="mb-2 text-center"
+                          onDoubleClick={(e) => {
+                            e.stopPropagation();
+                            setEditingNode(node.id);
                           }}
                         >
-                          <option value="">Seleccionar contacto</option>
-                          {contacts
-                            .filter((contact) => {
-                              const fullName = `${contact.first_name} ${contact.last_name}`;
-                              return !orgChartData.nodes.some(n => n.name === fullName && n.id !== node.id);
-                            })
-                            .map((contact) => (
-                              <option key={contact.id} value={contact.id}>
-                                {contact.first_name} {contact.last_name}
-                              </option>
-                            ))}
-                        </select>
-                      {node.role && (
-                        <p className="text-sm text-slate-500 text-center italic">
-                          {node.role}
-                        </p>
-                      )}
-                    </div>
-                  ) : (
-                    <>
-                      <div
-                        className="mb-2 text-center"
-                        onDoubleClick={(e) => {
-                          e.stopPropagation();
-                          setEditingNode(node.id);
-                        }}
-                      >
-                        <p className="font-semibold text-sm text-slate-800 truncate">
-                          {node.name || 'Sin nombre'}
-                        </p>
-                        <p className="text-sm text-slate-500 truncate italic">{node.role || 'Sin rol'}</p>
-                      </div>
-                      {selectedNode === node.id && (
-                        <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setConnectingFrom(node.id)}
-                            className="flex-1 h-7 text-xs"
-                            disabled={connectingFrom === node.id}
-                          >
-                            <GitBranch className="h-3 w-3" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => deleteOrgNode(node.id)}
-                            className="h-7 px-2 text-red-600 hover:bg-red-50"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
+                          <p className="font-semibold text-sm text-slate-800 truncate">
+                            {node.name || 'Sin nombre'}
+                          </p>
+                          <p className="text-sm text-slate-500 truncate italic">{node.role || 'Sin rol'}</p>
                         </div>
-                      )}
-                    </>
-                  )}
+                        {selectedNode === node.id && (
+                          <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setConnectingFrom(node.id)}
+                              className="flex-1 h-7 text-xs"
+                              disabled={connectingFrom === node.id}
+                            >
+                              <GitBranch className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => deleteOrgNode(node.id)}
+                              className="h-7 px-2 text-red-600 hover:bg-red-50"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
-
+              );
+            })}
             {orgChartData.nodes.length === 0 && (
               <div className="absolute inset-0 flex items-center justify-center text-slate-400">
                 <div className="text-center">
@@ -1037,6 +1077,20 @@ const handleContactSelect = (nodeId: string, contactId: string) => {
             </div>
           )}
         </CardContent>
+        <div className="flex items-center gap-4 mt-[-10px] mb-4 justify-center">
+          <div className="flex items-center gap-2">
+            <div className="text-xs text-slate-600 p-1 rounded-lg border-2 border-green-500 bg-white shadow-sm">Cliente</div>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="text-xs text-slate-600 p-1 rounded-lg border-2 border-yellow-500 bg-white shadow-sm">Prospect</div>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="text-xs text-slate-600 p-1 rounded-lg border-2 border-blue-500 bg-white shadow-sm">Oportunidad</div>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="text-xs text-slate-600 p-1 rounded-lg border-2 border-slate-300 bg-yellow-100 shadow-sm">+60 días sin contacto</div>  
+          </div>
+        </div>
       </Card>
 
       <Card className="shadow-sm rounded-2xl">
