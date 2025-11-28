@@ -39,7 +39,26 @@ if %ERRORLEVEL% neq 0 (
         
         (
         echo Set WshShell = CreateObject^("WScript.Shell"^)
+        echo Set objEnv = WshShell.Environment^("Process"^)
+        echo.
+        echo ' Leer PATH del sistema
+        echo Set objSysEnv = WshShell.Environment^("System"^)
+        echo systemPath = objSysEnv^("Path"^)
+        echo.
+        echo ' Leer PATH del usuario
+        echo Set objUserEnv = WshShell.Environment^("User"^)
+        echo userPath = objUserEnv^("Path"^)
+        echo.
+        echo ' Combinar PATHs
+        echo newPath = systemPath ^& ";" ^& userPath
+        echo.
+        echo ' Actualizar PATH del proceso
+        echo objEnv^("Path"^) = newPath
+        echo.
+        echo ' Esperar un momento
         echo WScript.Sleep 1500
+        echo.
+        echo ' Cambiar al directorio y ejecutar
         echo WshShell.CurrentDirectory = "%CD%"
         echo WshShell.Run "cmd.exe /c INSTALAR.bat --restart", 1, False
         ) > "!VBS_SCRIPT!"
