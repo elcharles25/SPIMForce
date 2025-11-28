@@ -27,7 +27,7 @@ if %ERRORLEVEL% neq 0 (
     
     if !INSTALL_RESULT! equ 2 (
         REM El usuario instaló manualmente Node.js
-        REM Crear script VBS para reiniciar con variables actualizadas
+        REM Crear script BAT auxiliar para reiniciar con PATH actualizado
         echo.
         echo ══════════════════════════════════════════════════════════
         echo   Node.js instalado - Reiniciando instalador...
@@ -35,41 +35,32 @@ if %ERRORLEVEL% neq 0 (
         echo.
         echo Creando script de reinicio...
         
-        set "VBS_SCRIPT=%TEMP%\restart-installer.vbs"
+        set "RESTART_BAT=%TEMP%\restart-installer.bat"
         
         (
-        echo Set WshShell = CreateObject^("WScript.Shell"^)
-        echo Set objEnv = WshShell.Environment^("Process"^)
+        echo @echo off
+        echo REM Actualizar PATH desde el registro
+        echo for /f "skip=2 tokens=3*" %%%%a in ^('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v Path 2^^^>nul'^) do set "SystemPath=%%%%a %%%%b"
+        echo for /f "skip=2 tokens=3*" %%%%a in ^('reg query "HKCU\Environment" /v Path 2^^^>nul'^) do set "UserPath=%%%%a %%%%b"
+        echo set "PATH=%%SystemPath%%;%%UserPath%%"
         echo.
-        echo ' Leer PATH del sistema
-        echo Set objSysEnv = WshShell.Environment^("System"^)
-        echo systemPath = objSysEnv^("Path"^)
+        echo REM Cambiar al directorio del instalador
+        echo cd /d "%CD%"
         echo.
-        echo ' Leer PATH del usuario
-        echo Set objUserEnv = WshShell.Environment^("User"^)
-        echo userPath = objUserEnv^("Path"^)
+        echo REM Ejecutar el instalador con el parámetro restart
+        echo call INSTALAR.bat --restart
         echo.
-        echo ' Combinar PATHs
-        echo newPath = systemPath ^& ";" ^& userPath
-        echo.
-        echo ' Actualizar PATH del proceso
-        echo objEnv^("Path"^) = newPath
-        echo.
-        echo ' Esperar un momento
-        echo WScript.Sleep 1500
-        echo.
-        echo ' Cambiar al directorio y ejecutar
-        echo WshShell.CurrentDirectory = "%CD%"
-        echo WshShell.Run "cmd.exe /c INSTALAR.bat --restart", 1, False
-        ) > "!VBS_SCRIPT!"
+        echo REM Eliminar este script temporal
+        echo del "%%~f0"
+        ) > "!RESTART_BAT!"
         
-        echo Script creado en: !VBS_SCRIPT!
+        echo Script creado en: !RESTART_BAT!
         echo.
-        echo Ejecutando reinicio en 2 segundos...
+        echo Reiniciando en 2 segundos...
         timeout /t 2 /nobreak > nul
         
-        REM Ejecutar el script VBS
-        start "" wscript.exe "!VBS_SCRIPT!"
+        REM Ejecutar el script BAT auxiliar en una nueva ventana
+        start "" cmd /c "!RESTART_BAT!"
         
         REM Cerrar esta ventana
         exit
@@ -88,8 +79,8 @@ if %ERRORLEVEL% neq 0 (
 
 :SkipNodeInstall
 
-REM Limpiar script VBS si existe
-if exist "%TEMP%\restart-installer.vbs" del "%TEMP%\restart-installer.vbs"
+REM Limpiar script temporal si existe
+if exist "%TEMP%\restart-installer.bat" del "%TEMP%\restart-installer.bat" 2>nul
 
 echo.
 echo Continuando con la instalación...
