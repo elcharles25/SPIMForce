@@ -2,6 +2,8 @@
 chcp 65001 > nul
 setlocal enabledelayedexpansion
 
+:MainMenu
+cls
 echo ╔════════════════════════════════════════════════════════════╗
 echo ║                                                            ║
 echo ║          INSTALADOR DE SPIMFORCE CRM v1.0                  ║
@@ -20,13 +22,50 @@ if %ERRORLEVEL% neq 0 (
     echo Intentando descargar e instalar Node.js automáticamente...
     echo.
     call :InstallNodeJS
-    if !ERRORLEVEL! neq 0 (
+    if !ERRORLEVEL! equ 2 (
+        REM El usuario está instalando manualmente Node.js
+        echo.
+        echo ══════════════════════════════════════════════════════════
+        echo   ESPERANDO INSTALACIÓN DE NODE.JS
+        echo ══════════════════════════════════════════════════════════
+        echo.
+        echo Por favor, complete la instalación de Node.js que se ha abierto.
+        echo.
+        echo Una vez finalizada la instalación:
+        echo   - Presione cualquier tecla para continuar
+        echo.
+        pause
+        
+        REM Refrescar variables de entorno sin cerrar la ventana
+        echo.
+        echo Refrescando variables de entorno...
+        call :RefreshEnv
+        
+        REM Volver a verificar Node.js
+        where node >nul 2>nul
+        if !ERRORLEVEL! neq 0 (
+            echo.
+            echo ⚠️  Node.js aún no está disponible en el PATH
+            echo.
+            echo Opciones:
+            echo   1. Presione cualquier tecla para verificar nuevamente
+            echo   2. Si el problema persiste, cierre esta ventana,
+            echo      abra una nueva ventana de comandos y ejecute INSTALAR.bat
+            echo.
+            pause
+            goto MainMenu
+        )
+        
+        echo ✅ Node.js detectado correctamente
+        echo.
+    ) else if !ERRORLEVEL! neq 0 (
         echo.
         echo Por favor, descargue e instale Node.js manualmente desde:
         echo https://nodejs.org/
         echo.
+        echo Después de la instalación, presione cualquier tecla para continuar
         pause
-        exit /b 1
+        goto MainMenu
     )
 )
 
@@ -101,9 +140,9 @@ if %NODE_ERROR% equ 0 (
     echo ✅ INSTALACIÓN COMPLETADA EXITOSAMENTE
     echo.
     echo Próximos pasos:
-    echo   1. Vaya a la carpeta principal de spimforce
-    echo   2. Ejecute start.bat para iniciar la aplicación
-    echo   3. Abra su navegador en http://localhost:8080
+    echo   1. Vaya al escritorio y ejecute el acceso directo SPIMForce
+    echo   2. O ejecute start.bat en la carpeta spimforce
+    echo   3. La aplicación se abrirá en http://localhost:8080
     echo.
 ) else (
     echo.
@@ -172,22 +211,42 @@ if %ERRORLEVEL% neq 0 (
     echo ⚠️  La instalación automática requiere permisos de administrador
     echo.
     echo Abriendo instalador manual...
-    start "" "%NODE_MSI%"
+    start "" /wait "%NODE_MSI%"
     echo.
-    echo Por favor:
-    echo   1. Complete la instalación de Node.js
-    echo   2. Cierre y vuelva a abrir esta ventana
-    echo   3. Ejecute INSTALAR.bat nuevamente
-    echo.
-    pause
-    exit /b 1
+    REM Retornar código 2 para indicar instalación manual completada
+    exit /b 2
 )
 
 echo.
 echo ✅ Node.js instalado correctamente
 echo.
-echo Actualizando variables de entorno...
-echo Por favor, cierre y vuelva a abrir esta ventana, luego ejecute INSTALAR.bat nuevamente
-echo.
-pause
 exit /b 0
+
+:RefreshEnv
+REM Refrescar variables de entorno PATH sin cerrar la ventana
+echo Actualizando PATH desde el registro...
+
+REM Leer PATH del sistema
+for /f "skip=2 tokens=3*" %%a in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v Path 2^>nul') do set "SystemPath=%%a %%b"
+
+REM Leer PATH del usuario
+for /f "skip=2 tokens=3*" %%a in ('reg query "HKCU\Environment" /v Path 2^>nul') do set "UserPath=%%a %%b"
+
+REM Combinar ambos PATHs
+set "PATH=%SystemPath%;%UserPath%"
+
+REM Agregar rutas comunes de Node.js si no están
+if not "!PATH:%ProgramFiles%\nodejs=!" == "!PATH!" (
+    echo Node.js ya está en PATH del sistema
+) else (
+    set "PATH=%PATH%;%ProgramFiles%\nodejs"
+)
+
+if not "!PATH:%APPDATA%\npm=!" == "!PATH!" (
+    echo npm global ya está en PATH
+) else (
+    set "PATH=%PATH%;%APPDATA%\npm"
+)
+
+echo ✅ Variables de entorno actualizadas
+goto :eof
