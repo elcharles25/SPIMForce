@@ -1,9 +1,10 @@
 @echo off
-chcp 65001 > nul
 setlocal enabledelayedexpansion
 
 REM Verificar si venimos de un reinicio
 if "%1"=="--restart" goto SkipNodeInstall
+
+chcp 65001 > nul
 
 echo ╔════════════════════════════════════════════════════════════╗
 echo ║                                                            ║
@@ -27,40 +28,22 @@ if %ERRORLEVEL% neq 0 (
     
     if !INSTALL_RESULT! equ 2 (
         REM El usuario instaló manualmente Node.js
-        REM Crear script BAT auxiliar para reiniciar con PATH actualizado
         echo.
         echo ══════════════════════════════════════════════════════════
         echo   Node.js instalado - Reiniciando instalador...
         echo ══════════════════════════════════════════════════════════
         echo.
-        echo Creando script de reinicio...
-        
-        set "RESTART_BAT=%TEMP%\restart-installer.bat"
-        
-        (
-        echo @echo off
-        echo REM Actualizar PATH desde el registro
-        echo for /f "skip=2 tokens=3*" %%%%a in ^('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v Path 2^^^>nul'^) do set "SystemPath=%%%%a %%%%b"
-        echo for /f "skip=2 tokens=3*" %%%%a in ^('reg query "HKCU\Environment" /v Path 2^^^>nul'^) do set "UserPath=%%%%a %%%%b"
-        echo set "PATH=%%SystemPath%%;%%UserPath%%"
-        echo.
-        echo REM Cambiar al directorio del instalador
-        echo cd /d "%CD%"
-        echo.
-        echo REM Ejecutar el instalador con el parámetro restart
-        echo call INSTALAR.bat --restart
-        echo.
-        echo REM Eliminar este script temporal
-        echo del "%%~f0"
-        ) > "!RESTART_BAT!"
-        
-        echo Script creado en: !RESTART_BAT!
-        echo.
-        echo Reiniciando en 2 segundos...
+        echo Reiniciando el instalador en 2 segundos...
+        echo Por favor, espere...
         timeout /t 2 /nobreak > nul
         
-        REM Ejecutar el script BAT auxiliar en una nueva ventana
-        start "" cmd /c "!RESTART_BAT!"
+        REM Usar PowerShell para abrir una nueva ventana con PATH actualizado
+        powershell -Command "Start-Process cmd -ArgumentList '/c cd /d \"%CD%\" && INSTALAR.bat --restart && pause' -Verb RunAs" 2>nul
+        
+        if !ERRORLEVEL! neq 0 (
+            REM Si falla con RunAs, intentar sin permisos de administrador
+            powershell -Command "Start-Process cmd -ArgumentList '/c cd /d \"%CD%\" && INSTALAR.bat --restart && pause'"
+        )
         
         REM Cerrar esta ventana
         exit
@@ -79,8 +62,7 @@ if %ERRORLEVEL% neq 0 (
 
 :SkipNodeInstall
 
-REM Limpiar script temporal si existe
-if exist "%TEMP%\restart-installer.bat" del "%TEMP%\restart-installer.bat" 2>nul
+chcp 65001 > nul
 
 echo.
 echo Continuando con la instalación...
