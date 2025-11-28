@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
 const { execSync } = require('child_process');
+const os = require('os');
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -628,6 +629,39 @@ pause
   }
 }
 
+function copyShortcutToDesktop() {
+  console.log('\n🔗 Copiando acceso directo al escritorio...');
+  
+  try {
+    const shortcutSource = path.join(appDir, 'SPIMforce.lnk');
+    
+    if (!fs.existsSync(shortcutSource)) {
+      console.log('   ⚠️  No se encontró el acceso directo SPIMforce.lnk en:', shortcutSource);
+      console.log('   ℹ️  Omitiendo copia al escritorio');
+      return false;
+    }
+    
+    const desktopPath = path.join(os.homedir(), 'Desktop');
+    const shortcutDest = path.join(desktopPath, 'SPIMforce.lnk');
+    
+    if (!fs.existsSync(desktopPath)) {
+      console.log('   ⚠️  No se encontró la carpeta del escritorio en:', desktopPath);
+      console.log('   ℹ️  Omitiendo copia al escritorio');
+      return false;
+    }
+    
+    fs.copyFileSync(shortcutSource, shortcutDest);
+    console.log('   ✅ Acceso directo copiado al escritorio');
+    console.log('   📍', shortcutDest);
+    return true;
+    
+  } catch (error) {
+    console.log('   ⚠️  Error copiando acceso directo:', error.message);
+    console.log('   ℹ️  Puede copiar manualmente SPIMforce.lnk desde la carpeta spimforce al escritorio');
+    return false;
+  }
+}
+
 function createReadme() {
   console.log('\n📄 Generando documentación...');
   
@@ -792,6 +826,8 @@ async function main() {
     createStartupScripts();
     createReadme();
     
+    const shortcutCopied = copyShortcutToDesktop();
+    
     console.log('\n╔════════════════════════════════════════════════════════════╗');
     console.log('║                                                            ║');
     console.log('║        ✅ INSTALACIÓN COMPLETADA EXITOSAMENTE ✅          ║');
@@ -802,19 +838,24 @@ async function main() {
     console.log('');
     console.log('   1. Asegurese de que MS Outlook está iniciado');
     console.log('');
-    console.log('   2. Vaya al escritorio');
+    
+    if (shortcutCopied) {
+      console.log('   2. Vaya al escritorio y ejecute el acceso directo:');
+      console.log('      SPIMForce');
+    } else {
+      console.log('   2. Para iniciar la aplicación, ejecute:');
+      console.log('      ' + path.join(appDir, 'start.bat'));
+    }
+    
     console.log('');
-    console.log('   3. Para iniciar la aplicación, ejecute el acceso directo:');
-    console.log('      SPIMForce');
-    console.log('');
-    console.log('   4. La aplicación se abrirá automáticamente en:');
+    console.log('   3. La aplicación se abrirá automáticamente en:');
     console.log('      http://localhost:8080');
     console.log('      (guarde la URL en favoritos para acceder directamente)');
     console.log('');
     console.log('      Siempre que no se detenga la aplicación o se apague el ordenador,');
     console.log('      no es necesario iniciar la aplicación de nuevo, solo acceder a la URL');
     console.log('');
-    console.log('   5. Para detener la aplicación:');
+    console.log('   4. Para detener la aplicación acceda a la carpeta de instalación y ejecute:');
     console.log('      stop.bat');
     console.log('');
     console.log('📚 Consulte LEEME.md en la carpeta spimforce para más información');
@@ -855,7 +896,6 @@ async function main() {
   }
 }
 
-// Manejar errores no capturados
 process.on('uncaughtException', (error) => {
   console.error('\n❌ Error no capturado:', error.message);
   console.error(error.stack);
