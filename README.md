@@ -117,9 +117,7 @@ Una vez completada la instalación, encontrará en la carpeta principal:
 ## 🚀 Iniciar la Aplicación
 
 ### Windows:
-```bash
-start.bat
-```
+En el escritorio: Ejecutar el acceso directo SPIMForce
 
 ### Otras plataformas:
 ```bash
@@ -131,6 +129,7 @@ La aplicación se abrirá automáticamente en: `http://localhost:8080`
 ## 🛑 Detener la Aplicación
 
 ### Windows:
+En la carpeta de instalación de la aplicación 
 ```bash
 stop.bat
 ```
