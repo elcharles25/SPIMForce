@@ -2,8 +2,16 @@
 chcp 65001 > nul
 setlocal enabledelayedexpansion
 
-:MainMenu
-cls
+REM Verificar si venimos de un reinicio después de instalar Node.js
+if "%1"=="--after-nodejs-install" (
+    echo.
+    echo ════════════════════════════════════════════════════════════
+    echo   Continuando después de instalar Node.js...
+    echo ════════════════════════════════════════════════════════════
+    echo.
+    timeout /t 2 /nobreak > nul
+)
+
 echo ╔════════════════════════════════════════════════════════════╗
 echo ║                                                            ║
 echo ║          INSTALADOR DE SPIMFORCE CRM v1.0                  ║
@@ -24,48 +32,29 @@ if %ERRORLEVEL% neq 0 (
     call :InstallNodeJS
     if !ERRORLEVEL! equ 2 (
         REM El usuario está instalando manualmente Node.js
+        REM Esperar a que complete y reiniciar el script
         echo.
         echo ══════════════════════════════════════════════════════════
-        echo   ESPERANDO INSTALACIÓN DE NODE.JS
+        echo   REINICIANDO INSTALADOR
         echo ══════════════════════════════════════════════════════════
         echo.
-        echo Por favor, complete la instalación de Node.js que se ha abierto.
+        echo El instalador se reiniciará automáticamente para detectar
+        echo la nueva instalación de Node.js...
         echo.
-        echo Una vez finalizada la instalación:
-        echo   - Presione cualquier tecla para continuar
-        echo.
-        pause
+        timeout /t 3 /nobreak > nul
         
-        REM Refrescar variables de entorno sin cerrar la ventana
-        echo.
-        echo Refrescando variables de entorno...
-        call :RefreshEnv
-        
-        REM Volver a verificar Node.js
-        where node >nul 2>nul
-        if !ERRORLEVEL! neq 0 (
-            echo.
-            echo ⚠️  Node.js aún no está disponible en el PATH
-            echo.
-            echo Opciones:
-            echo   1. Presione cualquier tecla para verificar nuevamente
-            echo   2. Si el problema persiste, cierre esta ventana,
-            echo      abra una nueva ventana de comandos y ejecute INSTALAR.bat
-            echo.
-            pause
-            goto MainMenu
-        )
-        
-        echo ✅ Node.js detectado correctamente
-        echo.
-    ) else if !ERRORLEVEL! neq 0 (
+        REM Reiniciar el script en una nueva sesión
+        start "" "%~f0" --after-nodejs-install
+        exit /b 0
+    ) else if !ERRORLEVEL! equ 1 (
         echo.
         echo Por favor, descargue e instale Node.js manualmente desde:
         echo https://nodejs.org/
         echo.
-        echo Después de la instalación, presione cualquier tecla para continuar
+        echo Después de la instalación, ejecute INSTALAR.bat nuevamente
+        echo.
         pause
-        goto MainMenu
+        exit /b 1
     )
 )
 
@@ -210,10 +199,21 @@ if %ERRORLEVEL% neq 0 (
     echo.
     echo ⚠️  La instalación automática requiere permisos de administrador
     echo.
-    echo Abriendo instalador manual...
-    start "" /wait "%NODE_MSI%"
+    echo Abriendo instalador manual de Node.js...
     echo.
-    REM Retornar código 2 para indicar instalación manual completada
+    echo Por favor:
+    echo   1. Complete la instalación que se va a abrir
+    echo   2. Este instalador se reiniciará automáticamente
+    echo.
+    timeout /t 3 /nobreak > nul
+    
+    REM Abrir instalador y esperar a que termine
+    start "" /wait "%NODE_MSI%"
+    
+    echo.
+    echo ✅ Instalación manual completada
+    echo.
+    REM Retornar código 2 para indicar que se debe reiniciar el script
     exit /b 2
 )
 
@@ -221,32 +221,3 @@ echo.
 echo ✅ Node.js instalado correctamente
 echo.
 exit /b 0
-
-:RefreshEnv
-REM Refrescar variables de entorno PATH sin cerrar la ventana
-echo Actualizando PATH desde el registro...
-
-REM Leer PATH del sistema
-for /f "skip=2 tokens=3*" %%a in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v Path 2^>nul') do set "SystemPath=%%a %%b"
-
-REM Leer PATH del usuario
-for /f "skip=2 tokens=3*" %%a in ('reg query "HKCU\Environment" /v Path 2^>nul') do set "UserPath=%%a %%b"
-
-REM Combinar ambos PATHs
-set "PATH=%SystemPath%;%UserPath%"
-
-REM Agregar rutas comunes de Node.js si no están
-if not "!PATH:%ProgramFiles%\nodejs=!" == "!PATH!" (
-    echo Node.js ya está en PATH del sistema
-) else (
-    set "PATH=%PATH%;%ProgramFiles%\nodejs"
-)
-
-if not "!PATH:%APPDATA%\npm=!" == "!PATH!" (
-    echo npm global ya está en PATH
-) else (
-    set "PATH=%PATH%;%APPDATA%\npm"
-)
-
-echo ✅ Variables de entorno actualizadas
-goto :eof
