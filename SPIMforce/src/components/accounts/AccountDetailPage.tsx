@@ -311,27 +311,62 @@ export default function AccountDetailPage() {
     };
   }, [editingNode]);
 
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      const [accountData, contactsData] = await Promise.all([
-        db.getAccount(id!),
-        db.getAccountContacts(id!),
-      ]);
-      
-      setAccount(accountData);
-      setContacts(contactsData);
-    } catch (error) {
-      console.error('Error cargando datos:', error);
-      toast({
-        title: 'Error',
-        description: 'No se pudieron cargar los datos de la cuenta',
-        variant: 'destructive',
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+const loadData = async () => {
+  try {
+    setLoading(true);
+    const [accountData, contactsData] = await Promise.all([
+      db.getAccount(id!),
+      db.getAccountContacts(id!),
+    ]);
+    
+    setAccount(accountData);
+    setContacts(contactsData);
+    
+    // Terminar el loading para que se muestren los datos inmediatamente
+    setLoading(false);
+    
+    // Actualizar last_contact_date en segundo plano para todos los contactos de la cuenta
+    (async () => {
+      for (const contact of contactsData) {
+        try {
+          const meetings = await db.getMeetingsByContact(contact.id);
+          
+          if (meetings.length > 0) {
+            const sortedMeetings = [...meetings].sort((a, b) => 
+              new Date(b.meeting_date).getTime() - new Date(a.meeting_date).getTime()
+            );
+            const lastMeetingDate = sortedMeetings[0].meeting_date;
+            
+            if (contact.last_contact_date !== lastMeetingDate) {
+              await db.updateContact(contact.id, { 
+                ...contact, 
+                last_contact_date: lastMeetingDate 
+              });
+              
+              // Actualizar el estado para reflejar el cambio en la UI
+              setContacts(prev => prev.map(c => 
+                c.id === contact.id 
+                  ? { ...c, last_contact_date: lastMeetingDate }
+                  : c
+              ));
+            }
+          }
+        } catch (error) {
+          console.error(`Error actualizando last_contact_date para contacto ${contact.id}:`, error);
+        }
+      }
+    })();
+    
+  } catch (error) {
+    console.error('Error cargando datos:', error);
+    toast({
+      title: 'Error',
+      description: 'No se pudieron cargar los datos de la cuenta',
+      variant: 'destructive',
+    });
+    setLoading(false);
+  }
+};
 
   const getContactById = (name: string) => {
     return contacts.find(c => `${c.first_name} ${c.last_name}` === name);
