@@ -1,12 +1,12 @@
 {
-  "name": "charlsforce-installer",
+  "name": "SPIMforce-installer",
   "version": "1.0.0",
-  "description": "Instalador de Charlsforce CRM",
+  "description": "Instalador de SPIMforce CRM",
   "main": "install.js",
   "scripts": {
     "install-app": "node install.js"
   },
-  "keywords": ["crm", "installer", "charlsforce"],
+  "keywords": ["crm", "installer", "SPIMforce"],
   "author": "Carlos",
   "license": "MIT",
   "dependencies": {
