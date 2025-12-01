@@ -63,6 +63,7 @@ export const CampaignList = () => {
   const location = useLocation();
   const [isCreating, setIsCreating] = useState(false);
   const [bulkContactSearch, setBulkContactSearch] = useState("");
+  const [bulkContactTypeFilter, setBulkContactTypeFilter] = useState<string[]>([]);
   
   const [repliedContact, setRepliedContact] = useState<{
     name: string;
@@ -134,16 +135,15 @@ export const CampaignList = () => {
     });
   };
 
- const getLastEmailDate = (campaign: Campaign): Date | null => {
-  // Obtener la fecha del último email ENVIADO (según emails_sent)
-  if (campaign.emails_sent === 0) return null;
-  
-  const emailsSent = Math.min(campaign.emails_sent, 5);
-  const dateField = `email_${emailsSent}_date` as keyof Campaign;
-  const lastSentDate = campaign[dateField];
-  
-  return lastSentDate ? new Date(lastSentDate as string) : null;
-};
+  const getLastEmailDate = (campaign: Campaign): Date | null => {
+    if (campaign.emails_sent === 0) return null;
+    
+    const emailsSent = Math.min(campaign.emails_sent, 5);
+    const dateField = `email_${emailsSent}_date` as keyof Campaign;
+    const lastSentDate = campaign[dateField];
+    
+    return lastSentDate ? new Date(lastSentDate as string) : null;
+  };
 
   const filterCampaignsByAge = (allCampaigns: Campaign[]) => {
     const twoMonthsAgo = new Date();
@@ -166,6 +166,16 @@ export const CampaignList = () => {
 
     setRecentCampaigns(recent);
     setOldCampaigns(old);
+  };
+
+  const toggleBulkContactTypeFilter = (type: string) => {
+    setBulkContactTypeFilter(prev => {
+      if (prev.includes(type)) {
+        return prev.filter(t => t !== type);
+      } else {
+        return [...prev, type];
+      }
+    });
   };
 
   useEffect(() => {
@@ -723,25 +733,35 @@ export const CampaignList = () => {
     setLoading(false);
   };
 
-  const fetchCampaigns = async () => {
-    const data = await db.getCampaigns();
-    
-    const normalizedData = data.map(campaign => ({
-      ...campaign,
-      email_1_date: campaign.email_1_date ? new Date(campaign.email_1_date).toLocaleDateString('en-CA') : null,
-      email_2_date: campaign.email_2_date ? new Date(campaign.email_2_date).toLocaleDateString('en-CA') : null,
-      email_3_date: campaign.email_3_date ? new Date(campaign.email_3_date).toLocaleDateString('en-CA') : null,
-      email_4_date: campaign.email_4_date ? new Date(campaign.email_4_date).toLocaleDateString('en-CA') : null,
-      email_5_date: campaign.email_5_date ? new Date(campaign.email_5_date).toLocaleDateString('en-CA') : null,
-    }));
+const fetchCampaigns = async () => {
+  const data = await db.getCampaigns();
+  
+  const normalizedData = data.map(campaign => ({
+    ...campaign,
+    email_1_date: campaign.email_1_date ? new Date(campaign.email_1_date).toLocaleDateString('en-CA') : null,
+    email_2_date: campaign.email_2_date ? new Date(campaign.email_2_date).toLocaleDateString('en-CA') : null,
+    email_3_date: campaign.email_3_date ? new Date(campaign.email_3_date).toLocaleDateString('en-CA') : null,
+    email_4_date: campaign.email_4_date ? new Date(campaign.email_4_date).toLocaleDateString('en-CA') : null,
+    email_5_date: campaign.email_5_date ? new Date(campaign.email_5_date).toLocaleDateString('en-CA') : null,
+  }));
 
-    const filteredCampaigns = (normalizedData || []).filter(campaign => 
+  const filteredCampaigns = (normalizedData || [])
+    .filter(campaign => 
       ALLOWED_CONTACT_TYPES.includes(campaign.contacts?.contact_type)
-    );
-    
-    setCampaigns(filteredCampaigns as Campaign[]);
-    filterCampaignsByAge(filteredCampaigns as Campaign[]);
-  };
+    )
+    .sort((a, b) => {
+      // Campañas sin fecha van al final
+      if (!a.email_1_date && !b.email_1_date) return 0;
+      if (!a.email_1_date) return 1;
+      if (!b.email_1_date) return -1;
+      
+      // Ordenar por fecha ascendente (más antigua primero)
+      return new Date(a.email_1_date).getTime() - new Date(b.email_1_date).getTime();
+    });
+  
+  setCampaigns(filteredCampaigns as Campaign[]);
+  filterCampaignsByAge(filteredCampaigns as Campaign[]);
+};
 
   const fetchContacts = async () => {
     try {
@@ -992,6 +1012,7 @@ export const CampaignList = () => {
       subject = subject.replace(/{{nombre}}/g, campaign.contacts.first_name || '');
       subject = subject.replace(/{{ano}}/g, currentYear);
       subject = subject.replace(/{{anoSiguiente}}/g, nextYear);
+      subject = subject.replace(/{{anosiguiente}}/g, nextYear);
       subject = subject.replace(/{{compania}}/g, campaign.contacts.organization || '');
 
       let body = template[`email_${emailNumber}_html`];
@@ -1001,6 +1022,7 @@ export const CampaignList = () => {
       body = body.replace(/{{compania}}/g, campaign.contacts.organization || '');
       body = body.replace(/{{ano}}/g, currentYear);
       body = body.replace(/{{anoSiguiente}}/g, nextYear);
+      body = body.replace(/{{anosiguiente}}/g, nextYear);
       
       if (signature) {
         body = body + '<br/><br/>' + signature;
@@ -1137,6 +1159,7 @@ export const CampaignList = () => {
     );
     setBulkFilteredContacts(availableContacts);
     setBulkContactSearch("");
+    setBulkContactTypeFilter([]);
   };
 
   const toggleContactSelection = (contactId: string) => {
@@ -1149,9 +1172,29 @@ export const CampaignList = () => {
   };
 
   const selectAllContacts = () => {
+    const searchTerm = bulkContactSearch.toLowerCase().trim();
+    let contactsToSelect = bulkFilteredContacts;
+
+    if (bulkContactTypeFilter.length > 0) {
+      contactsToSelect = contactsToSelect.filter(contact => {
+        if (bulkContactTypeFilter.includes('Cliente')) {
+          return contact.contact_type === 'Cliente' || contact.contact_type === 'Cliente proxy';
+        }
+        return bulkContactTypeFilter.includes(contact.contact_type);
+      });
+    }
+
+    if (searchTerm) {
+      contactsToSelect = contactsToSelect.filter((contact) => {
+        const fullName = `${contact.first_name} ${contact.last_name}`.toLowerCase();
+        const organization = contact.organization.toLowerCase();
+        return fullName.includes(searchTerm) || organization.includes(searchTerm);
+      });
+    }
+
     setBulkFormData(prev => ({
       ...prev,
-      selected_contacts: bulkFilteredContacts.map(c => c.id)
+      selected_contacts: contactsToSelect.map(c => c.id)
     }));
   };
 
@@ -1220,6 +1263,9 @@ export const CampaignList = () => {
           description: `${campaignsToCreate.length} campañas creadas correctamente`,
         });
         
+        setIsBulkDialogOpen(false);
+        resetBulkForm();
+
         setIsCreating(true);
         const today = new Date().toLocaleDateString('en-CA');
         if (bulkFormData.start_campaign && bulkFormData.email_1_date === today) {
@@ -1236,7 +1282,7 @@ export const CampaignList = () => {
           }
         }
       } catch (error) {
-        console.error("Error creando campañas:", error);
+        console.error("Error creando campañas masivas:", error);
         toast({
           title: "Error",
           description: "No se pudieron crear las campañas",
@@ -1244,11 +1290,9 @@ export const CampaignList = () => {
         });
       }
 
-      setIsBulkDialogOpen(false);
-      resetBulkForm();
       fetchCampaigns();
     } catch (error) {
-      console.error("Error creating bulk campaigns:", error);
+      console.error("Error creando campañas:", error);
       toast({
         title: "Error",
         description: "No se pudieron crear las campañas",
@@ -1273,7 +1317,8 @@ export const CampaignList = () => {
     });
     setBulkFilteredTemplates([]);
     setBulkFilteredContacts([]);
-    setBulkContactSearch(""); 
+    setBulkContactSearch("");
+    setBulkContactTypeFilter([]);
   };
 
   const renderCampaignTable = (campaignsToRender: Campaign[], showHeader: boolean = true) => (
@@ -1771,6 +1816,44 @@ export const CampaignList = () => {
                       />
                     </div>
                   )}
+
+                  {bulkFormData.gartner_role && bulkFilteredContacts.length > 0 && (
+                    <div className="flex gap-2 mb-3">
+                      <button
+                        type="button"
+                        className={`filter-chip ${
+                          bulkContactTypeFilter.includes('Cliente') 
+                            ? "filter-chip-active"
+                            : "filter-chip-inactive"
+                        }`}
+                        onClick={() => toggleBulkContactTypeFilter('Cliente')}
+                      >
+                        Clientes
+                      </button>
+                      <button
+                        type="button"
+                        className={`filter-chip ${
+                          bulkContactTypeFilter.includes('Prospect') 
+                            ? "filter-chip-active"
+                            : "filter-chip-inactive"
+                        }`}
+                        onClick={() => toggleBulkContactTypeFilter('Prospect')}
+                      >
+                        Prospects
+                      </button>
+                      <button
+                        type="button"
+                        className={`filter-chip ${
+                          bulkContactTypeFilter.includes('Oportunidad') 
+                            ? "filter-chip-active"
+                            : "filter-chip-inactive"
+                        }`}
+                        onClick={() => toggleBulkContactTypeFilter('Oportunidad')}
+                      >
+                        Oportunidades
+                      </button>
+                    </div>
+                  )}
     
                   <div className="border rounded-md p-4 max-h-60 overflow-y-auto space-y-2">
                     {!bulkFormData.gartner_role ? (
@@ -1784,19 +1867,31 @@ export const CampaignList = () => {
                     ) : (
                       (() => {
                         const searchTerm = bulkContactSearch.toLowerCase().trim();
-                        const filteredBySearch = bulkFilteredContacts.filter((contact) => {
-                          if (!searchTerm) return true;
-                          
-                          const fullName = `${contact.first_name} ${contact.last_name}`.toLowerCase();
-                          const organization = contact.organization.toLowerCase();
-                          
-                          return fullName.includes(searchTerm) || organization.includes(searchTerm);
-                        });
+                        let filteredBySearch = bulkFilteredContacts;
+
+                        if (bulkContactTypeFilter.length > 0) {
+                          filteredBySearch = filteredBySearch.filter(contact => {
+                            if (bulkContactTypeFilter.includes('Cliente')) {
+                              if (contact.contact_type === 'Cliente' || contact.contact_type === 'Cliente proxy') {
+                                return true;
+                              }
+                            }
+                            return bulkContactTypeFilter.includes(contact.contact_type);
+                          });
+                        }
+
+                        if (searchTerm) {
+                          filteredBySearch = filteredBySearch.filter((contact) => {
+                            const fullName = `${contact.first_name} ${contact.last_name}`.toLowerCase();
+                            const organization = contact.organization.toLowerCase();
+                            return fullName.includes(searchTerm) || organization.includes(searchTerm);
+                          });
+                        }
 
                         if (filteredBySearch.length === 0) {
                           return (
                             <p className="text-sm text-muted-foreground text-center py-4">
-                              No se encontraron contactos que coincidan con "{bulkContactSearch}"
+                              No se encontraron contactos con los filtros aplicados
                             </p>
                           );
                         }
@@ -1808,7 +1903,7 @@ export const CampaignList = () => {
                               onCheckedChange={() => toggleContactSelection(contact.id)}
                             />
                             <label className="text-sm cursor-pointer flex-1" onClick={() => toggleContactSelection(contact.id)}>
-                              {contact.organization} - {contact.first_name} {contact.last_name} ({contact.title}) [Tier {contact.tier}]
+                              {contact.organization} - {contact.first_name} {contact.last_name} ({contact.title}) [{contact.contact_type}] [Tier {contact.tier}]
                             </label>
                           </div>
                         ));
