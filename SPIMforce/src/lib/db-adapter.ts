@@ -305,6 +305,12 @@ export class DatabaseAdapter {
     return res.json();
   }
 
+  async getMeetingsWithoutOpportunity() {
+    const res = await fetch(`${API_URL}/api/meetings/without-opportunity`);
+    if (!res.ok) throw new Error('Error obteniendo meetings sin oportunidad');
+    return res.json();
+  }
+
   async getMeetingsByContact(contactId: string) {
     const res = await fetch(`${API_URL}/api/meetings/contact/${contactId}`);
     if (!res.ok) throw new Error('Error obteniendo meetings del contacto');

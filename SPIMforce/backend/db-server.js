@@ -1806,6 +1806,46 @@ app.get('/api/meetings/opportunity/:opportunityId', (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+ // GET meetings sin oportunidad
+// GET meetings sin oportunidad
+app.get('/api/meetings/without-opportunity', (req, res) => {
+  try {
+    const result = db.exec(`
+      SELECT 
+        m.*,
+        c.first_name, c.last_name, c.organization
+      FROM meetings m
+      LEFT JOIN contacts c ON m.contact_id = c.id
+      WHERE m.opportunity_id IS NULL 
+         OR m.opportunity_id = 'Sin oportunidad' 
+         OR m.opportunity_id = 'none'
+         OR m.opportunity_id = ''
+      ORDER BY m.meeting_date DESC
+    `);
+    const rows = rowsToObjects(result);
+    const meetings = rows.map(row => ({
+      id: row.id,
+      opportunity_id: row.opportunity_id,
+      contact_id: row.contact_id,
+      meeting_type: row.meeting_type,
+      meeting_date: formatDateTime(row.meeting_date),
+      feeling: row.feeling || '',
+      notes: row.notes,
+      created_at: formatDateTime(row.created_at),
+      contact: row.contact_id ? {
+        first_name: row.first_name,
+        last_name: row.last_name,
+        organization: row.organization
+      } : null
+    }));
+    res.json(meetings);
+  } catch (error) {
+    console.error('Error obteniendo meetings sin oportunidad:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // POST create meeting
 app.post('/api/meetings', (req, res) => {
   try {
@@ -2269,7 +2309,6 @@ app.delete('/api/accounts/:id/logo', (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
-
 
 const PORT = process.env.PORT || 3001;
 

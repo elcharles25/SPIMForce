@@ -4,7 +4,7 @@ import { db } from "@/lib/db-adapter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Users, Target, TrendingUp, Mail, CircleArrowRight, XCircle, Clock, Building2, Zap, Award, Activity, Briefcase, CalendarCheck, CircleCheckBig, CircleOff, AlertCircle } from "lucide-react";
+import { Users, Target, TrendingUp, Mail, CircleArrowRight, XCircle, Clock, Building2, Zap, Award, Activity, Briefcase, CalendarCheck, CircleCheckBig, CircleOff, AlertCircle, ChevronLeft, ChevronRight, Calendar } from "lucide-react";
 import { Bar } from "react-chartjs-2";
 import { formatDateTime } from "@/utils/dateFormatter";
 
@@ -67,12 +67,6 @@ interface DashboardMetrics {
     pending: number;
     subscribedContacts: number;
   };
-  recentActivity: Array<{
-    type: string;
-    description: string;
-    date: string;
-    icon: string;
-  }>;
 }
 
 interface ReplyRateByTemplate {
@@ -89,6 +83,15 @@ interface ReplyRateByRole {
   replyRate: number;
 }
 
+interface Meeting {
+  id: string;
+  meeting_date: string;
+  meeting_type: string;
+  organization: string;
+  contactName: string;
+  opportunityId: string;
+}
+
 const Dashboard = () => {
   const navigate = useNavigate();
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
@@ -96,6 +99,10 @@ const Dashboard = () => {
   const [showReplyRateDialog, setShowReplyRateDialog] = useState(false);
   const [replyRateByTemplate, setReplyRateByTemplate] = useState<ReplyRateByTemplate[]>([]);
   const [replyRateByRole, setReplyRateByRole] = useState<ReplyRateByRole[]>([]);
+  const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [selectedDayMeetings, setSelectedDayMeetings] = useState<Meeting[]>([]);
+  const [showMeetingsDialog, setShowMeetingsDialog] = useState(false);
 
   useEffect(() => {
     loadDashboardMetrics();
@@ -138,29 +145,23 @@ const Dashboard = () => {
     }
   };
 
-  // Utilidad: parsea fechas en varios formatos comunes y devuelve un Date o null
   function parseDateSafe(str) {
     if (typeof str !== "string") return null;
     const s = str.trim();
 
-    // ISO completo o parcial: YYYY-MM-DD o YYYY-MM-DDTHH:mm[:ss][Z]
-    // Esto es seguro con new Date en la mayoría de entornos
     const isoLike = /^\d{4}-\d{2}-\d{2}(?:[T\s]\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?(?:Z|[+\-]\d{2}:\d{2})?)?$/;
     if (isoLike.test(s)) {
       const d = new Date(s);
       return Number.isNaN(d.getTime()) ? null : d;
     }
 
-    // DD/MM/YYYY
     let m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
     if (m) {
       const [_, dd, mm, yyyy] = m.map(Number);
-      // Mes en JS: 0-11
       const d = new Date(yyyy, mm - 1, dd);
       return Number.isNaN(d.getTime()) ? null : d;
     }
 
-    // DD-MM-YYYY
     m = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
     if (m) {
       const [_, dd, mm, yyyy] = m.map(Number);
@@ -168,11 +169,9 @@ const Dashboard = () => {
       return Number.isNaN(d.getTime()) ? null : d;
     }
 
-    // Si llega en otro formato, puedes extender aquí con más casos.
     return null;
   }
 
-  // Normaliza una fecha al inicio del día local
   function normalizeToStartOfDay(d) {
     const n = new Date(d);
     n.setHours(0, 0, 0, 0);
@@ -197,6 +196,64 @@ const Dashboard = () => {
       year: 'numeric' 
     });
   };
+
+const loadMeetings = async () => {
+  try {
+    const allMeetings: Meeting[] = [];
+    const allowedTypes = ['SKO', 'QBR 90', 'QBR Midyear', 'QBR AA90', 'Qualification', 'Cap. Alignment', 'IPW', 'POC', 'EP POC', 'Proposal'];
+
+    // Cargar reuniones CON oportunidad
+    const opportunities = await db.getOpportunities();
+    for (const opp of opportunities) {
+      try {
+        const oppMeetings = await db.getMeetingsByOpportunity(opp.id);
+        
+        oppMeetings.forEach((meeting: any) => {
+          const meetingType = meeting.meeting_type?.trim();
+          
+          if (meetingType && allowedTypes.includes(meetingType)) {
+            allMeetings.push({
+              id: meeting.id,
+              meeting_date: meeting.meeting_date,
+              meeting_type: meetingType,
+              organization: opp.contact.organization,
+              contactName: `${opp.contact.first_name} ${opp.contact.last_name}`,
+              opportunityId: opp.id
+            });
+          }
+        });
+      } catch (error) {
+        console.error(`Error loading meetings for opportunity ${opp.id}:`, error);
+      }
+    }
+
+    // Cargar reuniones SIN oportunidad
+    try {
+  const meetingsWithoutOpp = await db.getMeetingsWithoutOpportunity();
+  
+  meetingsWithoutOpp.forEach((meeting: any) => {
+    const meetingType = meeting.meeting_type?.trim();
+    
+    if (meetingType && allowedTypes.includes(meetingType)) {
+      allMeetings.push({
+        id: meeting.id,
+        meeting_date: meeting.meeting_date,
+        meeting_type: meetingType,
+        organization: meeting.contact?.organization || 'Sin organización',
+        contactName: meeting.contact ? `${meeting.contact.first_name} ${meeting.contact.last_name}` : 'Sin contacto',
+        opportunityId: ''
+      });
+    }
+  });
+  } catch (error) {
+    console.error('Error loading meetings without opportunity:', error);
+  }
+
+    setMeetings(allMeetings);
+  } catch (error) {
+    console.error('Error loading meetings:', error);
+  }
+};
 
   const loadDashboardMetrics = async () => {
     try {
@@ -390,117 +447,6 @@ const Dashboard = () => {
       const sentDistributions = distributions.filter((d: any) => d.sent).length;
       const pendingDistributions = distributions.filter((d: any) => !d.sent).length;
 
-      const recentActivity: Array<{
-        type: string;
-        description: string;
-        date: string;
-        icon: string;
-      }> = [];
-
-      campaigns
-        .filter((c: any) => c.has_replied && c.last_reply_date)
-        .sort((a: any, b: any) => parseFlexibleDate(b.last_reply_date).getTime() - parseFlexibleDate(a.last_reply_date).getTime())
-        .slice(0, 3)
-        .forEach((c: any) => {
-          recentActivity.push({
-            type: 'reply',
-            description: `Campaña respondida: ${c.contacts.organization} - ${c.contacts.first_name} ${c.contacts.last_name}`,
-            date: c.last_reply_date,
-            icon: 'target'
-          });
-        });
-
-      opportunities
-        .filter((o: any) => o.created_at)
-        .sort((a: any, b: any) => parseFlexibleDate(b.created_at || 0).getTime() - parseFlexibleDate(a.created_at || 0).getTime())
-        .slice(0, 2)
-        .forEach((o: any) => {
-          recentActivity.push({
-            type: 'opportunity_new',
-            description: `Nueva oportunidad: ${o.contact.organization} - ${o.contact.first_name} ${o.contact.last_name} `,
-            date: o.created_at || new Date().toISOString(),
-            icon: 'briefcase'
-          });
-        });
-
-      opportunities
-        .filter((o: any) => o.status === 'Cerrada ganada' && o.updated_at)
-        .sort((a: any, b: any) => parseFlexibleDate(b.updated_at || 0).getTime() - parseFlexibleDate(a.updated_at || 0).getTime())
-        .slice(0, 2)
-        .forEach((o: any) => {
-          recentActivity.push({
-            type: 'opportunity_won',
-            description: `¡Oportunidad ganada! ${o.contact.organization}`,
-            date: o.updated_at || new Date().toISOString(),
-            icon: 'award'
-          });
-        });
-
-      distributions
-        .filter((d: any) => d.sent && d.sent_at)
-        .sort((a: any, b: any) => new Date(b.sent_at || 0).getTime() - new Date(a.sent_at || 0).getTime())
-        .slice(0, 2)
-        .forEach((d: any) => {
-          recentActivity.push({
-            type: 'webinar',
-            description: `Webinars enviados - ${d.month}`,
-            date: d.sent_at || new Date().toISOString(),
-            icon: 'calendar'
-          });
-        });
-
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-      
-      contacts
-        .filter((c: any) => c.created_at && new Date(c.created_at) >= sevenDaysAgo)
-        .sort((a: any, b: any) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
-        .slice(0, 2)
-        .forEach((c: any) => {
-          recentActivity.push({
-            type: 'contact_new',
-            description: `Nuevo contacto: ${c.organization} - ${c.first_name} ${c.last_name}`,
-            date: c.created_at || new Date().toISOString(),
-            icon: 'user'
-          });
-        });
-
-      campaigns
-        .filter((c: any) => c.start_campaign && c.email_1_date && new Date(c.email_1_date) >= sevenDaysAgo)
-        .sort((a: any, b: any) => parseFlexibleDate(b.email_1_date || 0).getTime() - parseFlexibleDate(a.email_1_date || 0).getTime())
-        .slice(0, 2)
-        .forEach((c: any) => {
-          recentActivity.push({
-            type: 'campaign_started',
-            description: `Campaña iniciada: ${c.contacts.organization} - ${c.contacts.first_name}`,
-            date: c.email_1_date || new Date().toISOString(),
-            icon: 'target'
-          });
-        });
-
-      for (const opp of opportunities.slice(0, 5)) {
-        try {
-          const meetings = await db.getMeetingsByOpportunity(opp.id);
-          const recentMeetings = meetings
-            .filter((m: any) => m.meeting_date && new Date(m.meeting_date) >= sevenDaysAgo)
-            .sort((a: any, b: any) => new Date(b.meeting_date).getTime() - new Date(a.meeting_date).getTime())
-            .slice(0, 1);
-          
-          recentMeetings.forEach((m: any) => {
-            recentActivity.push({
-              type: 'meeting',
-              description: `Reunión: ${opp.contact.organization} - ${m.meeting_type}`,
-              date: m.meeting_date,
-              icon: 'calendar'
-            });
-          });
-        } catch (error) {
-          console.error(`Error loading meetings for activity: ${opp.id}`, error);
-        }
-      }
-
-      recentActivity.sort((a, b) => parseFlexibleDate(b.date).getTime() - parseFlexibleDate(a.date).getTime());
-
       setMetrics({
         contacts: {
           total: contacts.length,
@@ -543,8 +489,9 @@ const Dashboard = () => {
           pending: pendingDistributions,
           subscribedContacts: webinarsSubscribedCount,
         },
-        recentActivity: recentActivity.slice(0, 5),
       });
+
+      await loadMeetings();
     } catch (error) {
       console.error("Error loading dashboard metrics:", error);
     } finally {
@@ -564,6 +511,116 @@ const Dashboard = () => {
     'Cerrada ganada',
     'Cerrada perdida'
   ];
+
+  const getDaysInMonth = (date: Date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const daysInMonth = lastDay.getDate();
+    const startingDayOfWeek = firstDay.getDay() === 0 ? 6 : firstDay.getDay() - 1;
+    
+    return { daysInMonth, startingDayOfWeek, year, month };
+  };
+
+  const getMeetingsForDay = (day: number) => {
+    const year = currentMonth.getFullYear();
+    const month = currentMonth.getMonth();
+    
+    return meetings.filter(meeting => {
+      const meetingDate = parseFlexibleDate(meeting.meeting_date);
+      return (
+        meetingDate.getFullYear() === year &&
+        meetingDate.getMonth() === month &&
+        meetingDate.getDate() === day
+      );
+    });
+  };
+
+  const getMeetingColor = (meetingType: string) => {
+    if (meetingType === 'SKO' || meetingType === 'QBR 90'|| meetingType === 'QBR Midyear'|| meetingType === 'QBR AA90') {
+      return 'bg-indigo-500';
+    }
+    return 'bg-amber-500';
+  };
+
+  const handleDayClick = (day: number) => {
+    const dayMeetings = getMeetingsForDay(day);
+    if (dayMeetings.length > 0) {
+      setSelectedDayMeetings(dayMeetings);
+      setShowMeetingsDialog(true);
+    }
+  };
+
+  const previousMonth = () => {
+    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
+  };
+
+  const nextMonth = () => {
+    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
+  };
+
+  const renderCalendar = () => {
+    const { daysInMonth, startingDayOfWeek, year, month } = getDaysInMonth(currentMonth);
+    const days = [];
+    const dayNames = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom' ];
+
+    for (let i = 0; i < startingDayOfWeek; i++) {
+      days.push(<div key={`empty-${i}`} className="h-20 border border-gray-100"></div>);
+    }
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dayMeetings = getMeetingsForDay(day);
+      const isToday = new Date().getDate() === day && 
+                      new Date().getMonth() === month && 
+                      new Date().getFullYear() === year;
+
+      days.push(
+        <div
+          key={day}
+          onClick={() => handleDayClick(day)}
+          className={`h-20 border border-gray-100 p-1 ${
+            dayMeetings.length > 0 ? 'cursor-pointer hover:bg-gray-50' : ''
+          } ${isToday ? 'bg-indigo-50' : ''}`}
+        >
+          <div className={`text-sm font-medium ${isToday ? 'text-indigo-600' : 'text-gray-700'}`}>
+            {day}
+          </div>
+          <div className="mt-1 space-y-1">
+            {dayMeetings.slice(0, 2).map((meeting, idx) => (
+              <div
+                key={idx}
+                className={`text-xs px-1 py-0.5 rounded text-white truncate ${getMeetingColor(meeting.meeting_type)}`}
+                title={`${meeting.meeting_type} - ${meeting.organization}`}
+              >
+                {meeting.meeting_type}
+              </div>
+            ))}
+            {dayMeetings.length > 2 && (
+              <div className="text-xs text-gray-500 px-1">
+                +{dayMeetings.length - 2} más
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-2">
+        <div className="grid grid-cols-7 gap-0">
+          {dayNames.map(name => (
+            <div key={name} className="text-center text-xs font-semibold text-gray-600 py-2 border border-gray-100 bg-gray-50">
+              {name}
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7 gap-0">
+          {days}
+        </div>
+      </div>
+    );
+  };
 
   if (loading) {
     return (
@@ -892,74 +949,55 @@ if (metrics.contacts.total === 0 && metrics.accounts.total === 0) {
           </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                Actividad Reciente
+            <CardHeader className="flex flex-col gap-3 pb-2">
+              <CardTitle className="flex items-center justify-between gap-2">
+                <span className="flex items-center gap-2">
+                  Reuniones agendadas
+                </span>
               </CardTitle>
+              <div className="flex items-center justify-between">
+                <button
+                  onClick={previousMonth}
+                  className="p-1 hover:bg-gray-100 rounded"
+                >
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
+                <span className="text-sm font-medium">
+                  {currentMonth.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}
+                </span>
+                <button
+                  onClick={nextMonth}
+                  className="p-1 hover:bg-gray-100 rounded"
+                >
+                  <ChevronRight className="h-5 w-5" />
+                </button>
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {metrics.recentActivity.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-8">
-                    No hay actividad reciente
+              {meetings.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-4 text-center">
+                  <div className="rounded-full bg-indigo-50 p-4 mb-4">
+                    <Calendar className="h-8 w-8 text-indigo-300" />
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    No hay reuniones agendadas
                   </p>
-                ) : (
-                  metrics.recentActivity.map((activity, index) => {
-                    let bgColor = 'bg-indigo-50';
-                    let iconColor = 'text-indigo-500';
-                    let Icon = Target;
-
-                    switch (activity.icon) {
-                      case 'mail':
-                        bgColor = 'bg-indigo-50';
-                        iconColor = 'text-indigo-500';
-                        Icon = Mail;
-                        break;
-                      case 'briefcase':
-                        bgColor = 'bg-indigo-50';
-                        iconColor = 'text-indigo-500';
-                        Icon = Briefcase;
-                        break;
-                      case 'award':
-                        bgColor = 'bg-indigo-50';
-                        iconColor = 'text-indigo-500';
-                        Icon = Award;
-                        break;
-                      case 'calendar':
-                        bgColor = 'bg-indigo-50';
-                        iconColor = 'text-indigo-500';
-                        Icon = CalendarCheck;
-                        break;
-                      case 'user':
-                        bgColor = 'bg-indigo-50';
-                        iconColor = 'text-indigo-500';
-                        Icon = Users;
-                        break;
-                      case 'target':
-                        bgColor = 'bg-indigo-50';
-                        iconColor = 'text-indigo-500';
-                        Icon = Target;
-                        break;
-                    }
-
-                    return (
-                      <div key={index} className="flex items-start gap-3 pb-3 border-b last:border-b-0">
-                        <div className={`p-2 rounded-full ${bgColor}`}>
-                          <Icon className={`h-4 w-4 ${iconColor}`} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-foreground truncate">
-                            {activity.description}
-                          </p>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {formatDate(activity.date)}
-                          </p>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {renderCalendar()}
+                  <div className="flex gap-4 justify-center pt-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded bg-indigo-500"></div>
+                      <span className="text-xs text-gray-600">SKO/QBR</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded bg-amber-500"></div>
+                      <span className="text-xs text-gray-600">Oportunidades</span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -1224,6 +1262,44 @@ if (metrics.contacts.total === 0 && metrics.accounts.total === 0) {
                   </div>
                 )}
               </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={showMeetingsDialog} onOpenChange={setShowMeetingsDialog}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Calendar className="h-5 w-5 text-indigo-600" />
+                Reuniones del día
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              {selectedDayMeetings.map((meeting, index) => (
+                <div
+                  key={index}
+                  className="p-4 border rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
+                  onClick={() => navigate(`/opportunities/${meeting.opportunityId}`)}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Badge
+                          className={`${
+                            meeting.meeting_type === 'SKO' || meeting.meeting_type === 'QBR 90' || meeting.meeting_type === 'QBR Midyear' || meeting.meeting_type === 'QBR AA90'
+                              ? 'bg-indigo-500'
+                              : 'bg-amber-500'
+                          } text-white`}
+                        >
+                          {meeting.meeting_type}
+                        </Badge>
+                      </div>
+                      <p className="font-medium text-sm">{meeting.organization}</p>
+                      <p className="text-xs text-muted-foreground">{meeting.contactName}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           </DialogContent>
         </Dialog>
