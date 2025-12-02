@@ -108,12 +108,13 @@ const analyzeWithGemini = async (contacts: Contact[], accountName: string): Prom
     `- ${c.first_name} ${c.last_name} (${c.title}) - Tipo: ${c.contact_type}`
   ).join('\n');
 
-  const fullPrompt = `Analiza la siguiente información de la organización "${accountName}" y sus contactos clave para identificar sus objetivos corporativos.
+  const fullPrompt = `Analiza la siguiente información de la organización "${accountName}" para identificar sus objetivos corporativos descritos en el plan estratégico.
 
 CONTACTOS DE LA ORGANIZACIÓN:
 ${contactsInfo}
 
-Basándote en la información disponible en internet sobre el último plan estratégico, ultimas noticias, informes de resultados, información en la web, etc., identifica los objetivos corporativos de esta organización, incluyendo una descripción detallada de los mismos y la fecha en la que deben ser completados y las fuentes de información.
+Basándote en la información disponible en internet sobre el plan estratégico, últimas noticias, informes de resultados e información general, identifica los objetivos corporativos de esta organización, incluyendo una descripción detallada de los mismos y la fecha en la que deben ser completados y las fuentes de información.
+El plan estratégico debe ser el que aplique al año actual, no el de años anteriores.
 
 IMPORTANTE: Devuelve SOLO un objeto JSON válido (sin markdown, sin \`\`\`json) con esta estructura exacta:
 {
