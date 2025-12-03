@@ -2619,14 +2619,1004 @@ app.get('/api/outlook/emails-with-cache', async (req, res) => {
   }
 });
 
-  app.listen(PORT, async () => {
-      console.log(`\n✅ Servidor de email ejecutándose en http://localhost:${PORT}`);
-      console.log('\nEndpoints disponibles:');
-      console.log('  POST /api/draft-email - Crear un borrador');
-      console.log('  POST /api/draft-emails-batch - Crear múltiples borradores');
-      console.log('  GET /api/health - Health check');
-      console.log('  POST /api/campaigns/check-all-replies - Revisar respuestas\n');
+/**
+ * Lee las reuniones del calendario de Outlook
+ * @param {number} daysBack - Días hacia atrás
+ * @param {number} daysForward - Días hacia adelante
+ */
+const readOutlookCalendar = async (daysBack = 365, daysForward = 365) => {
+  try {
+    const tempDir = path.join(__dirname, 'temp');
+    await fs.mkdir(tempDir, { recursive: true });
 
-      // ⭐ INICIALIZAR CACHÉ EN BACKGROUND AL ARRANCAR
-      await initializeCacheOnStartup();
+    const outputPath = path.join(tempDir, `calendar_${uuidv4()}.json`);
+    const escapedOutputPath = outputPath.replace(/\\/g, '\\\\');
+
+    const psScript = `$ErrorActionPreference = 'Stop'
+
+try {
+  Write-Host "Conectando a Outlook..."
+  
+  try {
+    $outlook = [System.Runtime.InteropServices.Marshal]::GetActiveObject("Outlook.Application")
+    Write-Host "Conectado a Outlook existente"
+  } catch {
+    Add-Type -AssemblyName Microsoft.Office.Interop.Outlook
+    $outlook = New-Object -ComObject Outlook.Application
+    Write-Host "Nueva instancia creada"
+  }
+
+  $namespace = $outlook.GetNamespace("MAPI")
+  $calendar = $namespace.GetDefaultFolder(9)
+  Write-Host "Calendario: $($calendar.Name) - Total items: $($calendar.Items.Count)"
+
+  $startDate = (Get-Date).AddDays(-${daysBack})
+  $endDate = (Get-Date).AddDays(${daysForward})
+  
+  Write-Host "Rango: $($startDate.ToString('yyyy-MM-dd')) a $($endDate.ToString('yyyy-MM-dd'))"
+
+  $filter = "[Start] >= '$($startDate.ToString('g'))' AND [Start] <= '$($endDate.ToString('g'))'"
+  $appointments = $calendar.Items.Restrict($filter)
+  $appointments.Sort("[Start]")
+  
+  Write-Host "Reuniones encontradas: $($appointments.Count)"
+
+  $results = @()
+  $processed = 0
+  
+  foreach ($appt in $appointments) {
+    try {
+      $processed++
+      
+      # Obtener lista de asistentes
+      $attendees = @()
+      try {
+        foreach ($recipient in $appt.Recipients) {
+          try {
+            $attendeeEmail = ""
+            $attendeeName = ""
+            
+            try {
+              $attendeeName = $recipient.Name
+            } catch {
+              $attendeeName = ""
+            }
+            
+            if ($recipient.AddressEntry.Type -eq "EX") {
+              try {
+                $exchangeUser = $recipient.AddressEntry.GetExchangeUser()
+                if ($exchangeUser -and $exchangeUser.PrimarySmtpAddress) {
+                  $attendeeEmail = $exchangeUser.PrimarySmtpAddress
+                }
+              } catch {}
+              
+              if ([string]::IsNullOrEmpty($attendeeEmail)) {
+                try {
+                  $PA_SMTP = "http://schemas.microsoft.com/mapi/proptag/0x39FE001E"
+                  $attendeeEmail = $recipient.AddressEntry.PropertyAccessor.GetProperty($PA_SMTP)
+                } catch {}
+              }
+              
+              if ([string]::IsNullOrEmpty($attendeeEmail)) {
+                try {
+                  $exchangeDL = $recipient.AddressEntry.GetExchangeDistributionList()
+                  if ($exchangeDL -and $exchangeDL.PrimarySmtpAddress) {
+                    $attendeeEmail = $exchangeDL.PrimarySmtpAddress
+                  }
+                } catch {}
+              }
+              
+              if ([string]::IsNullOrEmpty($attendeeEmail) -and -not [string]::IsNullOrEmpty($attendeeName)) {
+                $attendeeEmail = "NAME:$attendeeName"
+              }
+            } else {
+              $attendeeEmail = $recipient.Address
+            }
+            
+            if (-not [string]::IsNullOrEmpty($attendeeEmail)) {
+              $attendees += [PSCustomObject]@{
+                Name = $attendeeName
+                Email = $attendeeEmail
+              }
+            }
+          } catch {
+            # Ignorar error individual de asistente
+          }
+        }
+      } catch {
+        # Si falla la lectura de recipients, continuar sin ellos
+      }
+      
+      # Obtener organizador
+      $organizerEmail = ""
+      $organizerName = ""
+      try {
+        $organizerName = $appt.Organizer
+        
+        if ($appt.Organizer) {
+          try {
+            $organizer = $appt.GetOrganizer()
+            if ($organizer) {
+              if ($organizer.AddressEntry.Type -eq "EX") {
+                try {
+                  $exchangeUser = $organizer.AddressEntry.GetExchangeUser()
+                  if ($exchangeUser -and $exchangeUser.PrimarySmtpAddress) {
+                    $organizerEmail = $exchangeUser.PrimarySmtpAddress
+                  }
+                } catch {}
+              } else {
+                $organizerEmail = $organizer.Address
+              }
+            }
+          } catch {}
+        }
+      } catch {
+        $organizerName = "Unknown"
+      }
+      
+      $results += [PSCustomObject]@{
+        Subject = if ($appt.Subject) { $appt.Subject } else { "" }
+        Start = $appt.Start.ToString("yyyy-MM-dd HH:mm:ss")
+        End = $appt.End.ToString("yyyy-MM-dd HH:mm:ss")
+        Location = if ($appt.Location) { $appt.Location } else { "" }
+        Body = if ($appt.Body) { $appt.Body.Substring(0, [Math]::Min(2000, $appt.Body.Length)) } else { "" }
+        OrganizerName = $organizerName
+        OrganizerEmail = $organizerEmail
+        Attendees = $attendees
+        IsAllDayEvent = $appt.AllDayEvent
+        Duration = $appt.Duration
+      }
+      
+    } catch {
+      Write-Host "Error procesando reunión: $($_.Exception.Message)"
+      continue
+    }
+  }
+
+  Write-Host "Total procesadas: $($results.Count)"
+
+  $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+  if ($results.Count -eq 0) {
+    [System.IO.File]::WriteAllText('${escapedOutputPath}', '[]', $utf8NoBom)
+  } else {
+    $json = $results | ConvertTo-Json -Depth 5 -Compress
+    [System.IO.File]::WriteAllText('${escapedOutputPath}', $json, $utf8NoBom)
+  }
+
+  Write-Host "Success"
+  
+} catch {
+  Write-Host "ERROR CRITICO: $($_.Exception.Message)"
+  Write-Host "StackTrace: $($_.Exception.StackTrace)"
+  $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+  [System.IO.File]::WriteAllText('${escapedOutputPath}', '[]', $utf8NoBom)
+  exit 1
+}`;
+
+    const scriptPath = path.join(tempDir, `read_calendar_${uuidv4()}.ps1`);
+    await fs.writeFile(scriptPath, psScript, 'utf8');
+
+    console.log('📅 Leyendo calendario de Outlook...');
+    console.log(`📆 Rango: ${daysBack} días atrás, ${daysForward} días adelante`);
+
+    try {
+      const { stdout, stderr } = await execPromise(
+        `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}"`,
+        { encoding: 'utf8', timeout: 1500000 }
+      );
+
+      console.log('📤 PowerShell stdout:', stdout);
+      if (stderr) console.log('⚠️ PowerShell stderr:', stderr);
+    } catch (execError) {
+      console.error('❌ Error ejecutando PowerShell:', execError.message);
+    }
+
+    if (!fsSync.existsSync(outputPath)) {
+      console.error('❌ Archivo no generado');
+      await fs.unlink(scriptPath).catch(() => {});
+      return [];
+    }
+
+    const buffer = await fs.readFile(outputPath);
+    let data;
+    if (buffer[0] === 0xEF && buffer[1] === 0xBB && buffer[2] === 0xBF) {
+      data = buffer.slice(3).toString('utf8');
+    } else {
+      data = buffer.toString('utf8');
+    }
+
+    let meetings = [];
+    try {
+      meetings = JSON.parse(data);
+      console.log(`✅ ${meetings.length} reuniones parseadas correctamente`);
+    } catch (parseError) {
+      console.error('❌ Error parseando JSON:', parseError.message);
+      meetings = [];
+    }
+
+    await fs.unlink(scriptPath).catch(() => {});
+    await fs.unlink(outputPath).catch(() => {});
+
+    return Array.isArray(meetings) ? meetings : [];
+
+  } catch (err) {
+    console.error('❌ Error leyendo calendario:', err.message);
+    return [];
+  }
+};
+
+/**
+ * Verifica si un contacto está en la lista de asistentes de una reunión
+ */
+const isContactInMeeting = (meeting, contactEmail, contactFirstName = '', contactLastName = '') => {
+  if (!meeting.Attendees || meeting.Attendees.length === 0) return false;
+  
+  const normalizedContactEmail = contactEmail.toLowerCase().trim();
+  const contactUsername = normalizedContactEmail.split('@')[0];
+  
+  for (const attendee of meeting.Attendees) {
+    const attendeeEmail = (attendee.Email || '').toLowerCase().trim();
+    
+    // Match exacto por email
+    if (attendeeEmail === normalizedContactEmail) {
+      return true;
+    }
+    
+    // Match por username
+    if (attendeeEmail.includes('@')) {
+      const attendeeUsername = attendeeEmail.split('@')[0];
+      if (contactUsername.length > 3 && attendeeUsername.includes(contactUsername)) {
+        return true;
+      }
+    }
+    
+    // Match por nombre en formato "NAME:..."
+    if (attendeeEmail.startsWith('name:')) {
+      const attendeeName = normalizeText(attendee.Name || '');
+      const fullContactName = normalizeText(`${contactFirstName} ${contactLastName}`);
+      
+      if (attendeeName && fullContactName && attendeeName.includes(fullContactName.split(' ')[0])) {
+        return true;
+      }
+    }
+  }
+  
+  return false;
+};
+
+/**
+ * GET /api/outlook/calendar
+ * Lee las reuniones del calendario de Outlook
+ */
+app.get('/api/outlook/calendar', async (req, res) => {
+  try {
+    const daysBack = typeof req.query.daysBack === 'string' ? parseInt(req.query.daysBack) : 365;
+    const daysForward = typeof req.query.daysForward === 'string' ? parseInt(req.query.daysForward) : 365;
+    
+    console.log(`📅 Leyendo calendario: ${daysBack} días atrás, ${daysForward} días adelante`);
+    
+    const meetings = await readOutlookCalendar(daysBack, daysForward);
+    
+    res.json({
+      success: true,
+      count: meetings.length,
+      daysBack,
+      daysForward,
+      meetings
     });
+  } catch (error) {
+    console.error('Error leyendo calendario:', error);
+    res.status(500).json({ 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    });
+  }
+});
+
+/**
+ * POST /api/contacts/import-calendar-meetings
+ * Importa reuniones del calendario de Outlook para un contacto específico
+ * Body: { contactId: string, contactEmail: string, daysBack: number, daysForward: number }
+ */
+app.post('/api/contacts/import-calendar-meetings', async (req, res) => {
+  try {
+    const { contactId, contactEmail, daysBack = 365, daysForward = 365 } = req.body;
+
+    if (!contactId || !contactEmail) {
+      return res.status(400).json({ error: 'contactId y contactEmail son requeridos' });
+    }
+
+    console.log(`📅 Importando reuniones del calendario para ${contactEmail}...`);
+
+    // Obtener datos del contacto
+    const contactResponse = await fetch(`http://localhost:3001/api/contacts/${contactId}`);
+    const contactData = await contactResponse.json();
+    
+    const firstName = contactData.first_name || '';
+    const lastName = contactData.last_name || '';
+
+    // Leer calendario
+    const calendarMeetings = await readOutlookCalendar(daysBack, daysForward);
+    console.log(`📆 Total reuniones en calendario: ${calendarMeetings.length}`);
+
+    // Filtrar reuniones donde está el contacto
+    const contactMeetings = calendarMeetings.filter(meeting => 
+      isContactInMeeting(meeting, contactEmail, firstName, lastName)
+    );
+
+    console.log(`✅ Reuniones donde está ${contactEmail}: ${contactMeetings.length}`);
+
+    if (contactMeetings.length === 0) {
+      return res.json({
+        success: true,
+        message: 'No se encontraron reuniones con este contacto',
+        importedCount: 0,
+        skippedCount: 0
+      });
+    }
+
+    // Obtener meetings existentes
+    const existingMeetingsResponse = await fetch(`http://localhost:3001/api/meetings/contact/${contactId}`);
+    const existingMeetings = await existingMeetingsResponse.json();
+    
+    console.log(`📋 Meetings existentes: ${existingMeetings.length}`);
+
+    let importedCount = 0;
+    let skippedCount = 0;
+    let errorCount = 0;
+    const results = [];
+
+    // Tipos de reunión permitidos
+    const allowedTypes = ['SKO', 'QBR 90', 'QBR MIDYEAR', 'QBR AA90', 'Qualification', 'Cap. Alignment', 'IPW', 'POC', 'EP POC', 'Proposal', 'Delivery', 'Otros'];
+
+    for (const meeting of contactMeetings) {
+      try {
+        const meetingDate = meeting.Start.split(' ')[0];
+        const meetingTime = meeting.Start.split(' ')[1] || '00:00:00';
+        const normalizedSubject = meeting.Subject.trim().toLowerCase();
+        
+        // Determinar el tipo de reunión basado en el subject
+        let meetingType = 'Otros';
+        for (const type of allowedTypes) {
+          if (normalizedSubject.toLowerCase().includes(type.toLowerCase())) {
+            meetingType = type;
+            break;
+          }
+        }
+        
+        // Verificar si ya existe
+        const isDuplicate = existingMeetings.some(existingMeeting => {
+          let existingDate = existingMeeting.meeting_date;
+          
+          // Normalizar fecha existente
+          if (existingDate.includes('/')) {
+            const [day, monthYear] = existingDate.split('/');
+            const [month, yearTime] = monthYear.split('/');
+            const year = yearTime.split(' ')[0];
+            existingDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+          } else if (existingDate.includes(' ')) {
+            existingDate = existingDate.split(' ')[0];
+          }
+          
+          if (existingDate !== meetingDate) return false;
+          
+          // Comparar subject
+          const existingSubject = (existingMeeting.notes || '').split('\n')[0].trim().toLowerCase();
+          return existingSubject.includes(normalizedSubject) || normalizedSubject.includes(existingSubject);
+        });
+
+        if (isDuplicate) {
+          console.log(`⏭️  Reunión ya existe, omitiendo: ${meeting.Subject} (${meetingDate})`);
+          skippedCount++;
+          results.push({
+            subject: meeting.Subject,
+            date: meeting.Start,
+            type: meetingType,
+            status: 'skipped',
+            reason: 'Ya existe'
+          });
+          continue;
+        }
+
+        // Preparar notas
+        const notes = `${meeting.Subject}
+
+Fecha: ${meeting.Start}
+Duración: ${meeting.Duration} minutos
+Ubicación: ${meeting.Location || 'No especificada'}
+
+${meeting.Body ? meeting.Body : ''}`.trim();
+
+        // Crear meeting
+        const meetingData = {
+          contact_id: contactId,
+          opportunity_id: null,
+          meeting_type: meetingType,
+          meeting_date: `${meetingDate} ${meetingTime}`,
+          feeling: '',
+          notes: notes
+        };
+
+        const response = await fetch('http://localhost:3001/api/meetings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(meetingData)
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Error HTTP: ${response.status} - ${errorText}`);
+        }
+
+        const result = await response.json();
+        
+        importedCount++;
+        results.push({
+          subject: meeting.Subject,
+          date: meeting.Start,
+          type: meetingType,
+          status: 'imported',
+          meetingId: result.id
+        });
+        
+        console.log(`✅ Reunión importada [${meetingType}]: ${meeting.Subject} (${meetingDate})`);
+      } catch (error) {
+        errorCount++;
+        results.push({
+          subject: meeting.Subject,
+          date: meeting.Start,
+          type: 'Error',
+          status: 'error',
+          error: error.message
+        });
+        console.error(`❌ Error importando reunión "${meeting.Subject}":`, error.message);
+      }
+    }
+
+    console.log(`\n📊 Importación de reuniones completada:`);
+    console.log(`   Importadas: ${importedCount}`);
+    console.log(`   Omitidas (duplicadas): ${skippedCount}`);
+    console.log(`   Errores: ${errorCount}`);
+
+    res.json({
+      success: true,
+      importedCount,
+      skippedCount,
+      errorCount,
+      totalFound: contactMeetings.length,
+      results
+    });
+
+  } catch (error) {
+    console.error('💥 Error importando reuniones del calendario:', error);
+    res.status(500).json({ 
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * ========================================
+ * SISTEMA DE CACHÉ DE CALENDARIO (REUNIONES)
+ * ========================================
+ */
+
+let calendarCacheInitializationInProgress = false;
+let calendarCacheInitializationPromise = null;
+
+/**
+ * Obtiene la lista de archivos de caché de calendario ordenados por fecha
+ */
+const getCacheFilesCalendar = async () => {
+  try {
+    const cacheDir = path.join(__dirname, 'temp', 'calendar_cache');
+    await fs.mkdir(cacheDir, { recursive: true });
+    
+    const files = await fs.readdir(cacheDir);
+    const cacheFiles = files
+      .filter(f => f.startsWith('calendar_') && f.endsWith('.json'))
+      .map(f => {
+        const match = f.match(/calendar_(\d{4}-\d{2}-\d{2})_to_(\d{4}-\d{2}-\d{2})\.json/);
+        if (match) {
+          return {
+            filename: f,
+            path: path.join(cacheDir, f),
+            startDate: match[1],
+            endDate: match[2]
+          };
+        }
+        return null;
+      })
+      .filter(f => f !== null)
+      .sort((a, b) => a.startDate.localeCompare(b.startDate));
+    
+    return cacheFiles;
+  } catch (error) {
+    console.error('Error obteniendo archivos de caché de calendario:', error);
+    return [];
+  }
+};
+
+/**
+ * Lee reuniones desde los archivos de caché
+ */
+const readFromCacheCalendar = async (startDate, endDate) => {
+  try {
+    const cacheFiles = await getCacheFilesCalendar();
+    console.log(`📂 Archivos de caché de calendario disponibles: ${cacheFiles.length}`);
+    
+    const allMeetings = [];
+    
+    for (const cacheFile of cacheFiles) {
+      if (cacheFile.endDate >= startDate && cacheFile.startDate <= endDate) {
+        console.log(`📖 Leyendo caché: ${cacheFile.filename}`);
+        
+        const data = await fs.readFile(cacheFile.path, 'utf8');
+        const meetings = JSON.parse(data);
+        
+        const filteredMeetings = meetings.filter(meeting => {
+          const meetingDate = meeting.Start.split(' ')[0];
+          return meetingDate >= startDate && meetingDate <= endDate;
+        });
+        
+        allMeetings.push(...filteredMeetings);
+        console.log(`   ✅ ${filteredMeetings.length} reuniones del rango solicitado`);
+      }
+    }
+    
+    console.log(`📊 Total reuniones desde caché: ${allMeetings.length}`);
+    return allMeetings;
+  } catch (error) {
+    console.error('Error leyendo desde caché de calendario:', error);
+    return [];
+  }
+};
+
+/**
+ * Guarda reuniones en un archivo de caché incremental
+ */
+const saveToCacheCalendar = async (meetings, startDate, endDate) => {
+  try {
+    const cacheDir = path.join(__dirname, 'temp', 'calendar_cache');
+    await fs.mkdir(cacheDir, { recursive: true });
+    
+    const filename = `calendar_${startDate}_to_${endDate}.json`;
+    const filepath = path.join(cacheDir, filename);
+    
+    console.log(`💾 Guardando ${meetings.length} reuniones en caché: ${filename}`);
+    
+    await fs.writeFile(filepath, JSON.stringify(meetings, null, 2), 'utf8');
+    
+    console.log(`✅ Caché de calendario guardada exitosamente`);
+    return filepath;
+  } catch (error) {
+    console.error('Error guardando en caché de calendario:', error);
+    throw error;
+  }
+};
+
+/**
+ * Obtiene la fecha del último archivo de caché de calendario
+ */
+const getLastCacheDateCalendar = async () => {
+  try {
+    const cacheFiles = await getCacheFilesCalendar();
+    
+    if (cacheFiles.length === 0) {
+      return null;
+    }
+    
+    const lastFile = cacheFiles[cacheFiles.length - 1];
+    return lastFile.endDate;
+  } catch (error) {
+    console.error('Error obteniendo última fecha de caché de calendario:', error);
+    return null;
+  }
+};
+
+/**
+ * Crea un nuevo archivo de caché incremental de calendario
+ * - Primera caché: 365 días atrás + 180 días adelante
+ * - Cachés incrementales: desde última caché hasta 180 días adelante
+ */
+const createIncrementalCacheCalendar = async (silent = false) => {
+  if (calendarCacheInitializationInProgress) {
+    console.log('⚠️ Ya hay una construcción de caché de calendario en progreso...');
+    if (calendarCacheInitializationPromise) {
+      return await calendarCacheInitializationPromise;
+    }
+    return { success: false, message: 'Construcción en progreso', daysAdded: 0 };
+  }
+
+  calendarCacheInitializationInProgress = true;
+  
+  try {
+    if (!silent) console.log('\n🔄 Creando caché incremental del calendario...');
+    
+    const lastCacheDate = await getLastCacheDateCalendar();
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+    
+    // Calcular 6 meses a futuro
+    const futureDate = new Date(today);
+    futureDate.setMonth(futureDate.getMonth() + 6);
+    const futureDateStr = futureDate.toISOString().split('T')[0];
+    
+    let startDate;
+    let endDate = futureDateStr;
+    let daysBack;
+    let daysForward;
+    
+    if (lastCacheDate) {
+      // CACHÉ INCREMENTAL
+      const lastDate = new Date(lastCacheDate);
+      
+      // Verificar si la última caché ya cubre el rango futuro
+      if (lastCacheDate >= futureDateStr) {
+        if (!silent) console.log('⚠️ La caché de calendario ya está actualizada');
+        return { success: true, message: 'Caché ya actualizada', daysAdded: 0 };
+      }
+      
+      // Empezar desde el día siguiente a la última caché
+      lastDate.setDate(lastDate.getDate() + 1);
+      startDate = lastDate.toISOString().split('T')[0];
+      
+      // Calcular días desde startDate hasta today
+      const diffTime = today - lastDate;
+      daysBack = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+      
+      // Calcular días desde today hasta futureDate
+      const forwardDiffTime = futureDate - today;
+      daysForward = Math.ceil(forwardDiffTime / (1000 * 60 * 60 * 24));
+      
+      if (!silent) {
+        console.log(`📅 Última caché: ${lastCacheDate}`);
+        console.log(`📅 Caché incremental desde: ${startDate} hasta: ${futureDateStr}`);
+        console.log(`📅 Días atrás: ${daysBack}, Días adelante: ${daysForward}`);
+      }
+    } else {
+      // PRIMERA CACHÉ: 365 días atrás + 180 días adelante
+      daysBack = 365;
+      daysForward = 180;
+      const startDateObj = new Date(today);
+      startDateObj.setDate(startDateObj.getDate() - daysBack);
+      startDate = startDateObj.toISOString().split('T')[0];
+      
+      if (!silent) {
+        console.log(`📅 🎉 PRIMERA CACHÉ DE CALENDARIO`);
+        console.log(`📅 Desde: ${startDate} hasta: ${futureDateStr}`);
+        console.log(`📅 Días atrás: ${daysBack}, Días adelante: ${daysForward}`);
+        console.log(`⏳ Esto puede tardar varios minutos...`);
+      }
+    }
+    
+    // Descargar reuniones
+    if (!silent) console.log(`📥 Descargando reuniones del calendario...`);
+    const meetings = await readOutlookCalendar(daysBack, daysForward);
+    
+    if (meetings.length === 0) {
+      if (!silent) console.log('⚠️ No se encontraron reuniones en el rango');
+      return { success: false, message: 'No hay reuniones en el rango', daysAdded: 0 };
+    }
+    
+    // Guardar en caché
+    await saveToCacheCalendar(meetings, startDate, endDate);
+    
+    if (!silent) {
+      console.log(`✅ Caché de calendario ${lastCacheDate ? 'incremental' : 'inicial'} creada exitosamente`);
+      console.log(`📊 ${meetings.length} reuniones guardadas`);
+    }
+    
+    return {
+      success: true,
+      message: lastCacheDate ? 'Caché incremental creada' : 'Primera caché creada',
+      startDate,
+      endDate,
+      meetingCount: meetings.length,
+      daysAdded: daysBack + daysForward,
+      isFirstCache: !lastCacheDate
+    };
+  } catch (error) {
+    console.error('❌ Error creando caché incremental de calendario:', error);
+    throw error;
+  } finally {
+    calendarCacheInitializationInProgress = false;
+    calendarCacheInitializationPromise = null;
+  }
+};
+
+/**
+ * Inicializa el caché de calendario en background al arrancar el servidor
+ */
+const initializeCalendarCacheOnStartup = async () => {
+  try {
+    console.log('\n🔍 Verificando estado del caché de calendario...');
+    
+    const cacheFiles = await getCacheFilesCalendar();
+    
+    if (cacheFiles.length === 0) {
+      console.log('⚠️ No hay caché de calendario disponible - iniciando construcción en BACKGROUND');
+      console.log('🚀 La aplicación seguirá funcionando mientras se construye el caché');
+      console.log('⏳ Este proceso puede tardar varios minutos\n');
+      
+      calendarCacheInitializationPromise = createIncrementalCacheCalendar(false)
+        .then(result => {
+          if (result.success) {
+            console.log('\n✅✅✅ CACHÉ DE CALENDARIO INICIAL COMPLETADA ✅✅✅');
+            console.log(`📊 ${result.meetingCount} reuniones guardadas`);
+            console.log(`📅 Rango: ${result.startDate} → ${result.endDate}\n`);
+            
+            // Sincronizar con BD después de crear la caché
+            syncAllMeetingsToDatabase().catch(err => {
+              console.error('⚠️ Error sincronizando reuniones con BD:', err.message);
+            });
+          } else {
+            console.error('⚠️ Construcción de caché de calendario terminó sin éxito:', result.message);
+          }
+          return result;
+        })
+        .catch(err => {
+          console.error('❌ Error en construcción de caché de calendario:', err.message);
+          return { success: false, message: err.message };
+        });
+      
+      console.log('✅ Construcción de caché de calendario iniciada en background');
+      
+    } else {
+      console.log(`✅ Caché de calendario encontrada: ${cacheFiles.length} archivo(s)`);
+      const lastCacheDate = await getLastCacheDateCalendar();
+      console.log(`📅 Última actualización: ${lastCacheDate}\n`);
+      
+      // Sincronizar con BD al arrancar
+      syncAllMeetingsToDatabase().catch(err => {
+        console.error('⚠️ Error sincronizando reuniones con BD:', err.message);
+      });
+    }
+  } catch (error) {
+    console.error('⚠️ Error verificando caché de calendario:', error.message);
+  }
+};
+
+/**
+ * Sincroniza todas las reuniones de la caché con la base de datos
+ */
+const syncAllMeetingsToDatabase = async () => {
+  try {
+    console.log('\n📊 === SINCRONIZANDO REUNIONES CON BASE DE DATOS ===');
+    
+    // Calcular rango: 365 días atrás + 180 días adelante
+    const today = new Date();
+    const pastDate = new Date(today);
+    pastDate.setDate(pastDate.getDate() - 365);
+    const futureDate = new Date(today);
+    futureDate.setMonth(futureDate.getMonth() + 6);
+    
+    const startDateStr = pastDate.toISOString().split('T')[0];
+    const endDateStr = futureDate.toISOString().split('T')[0];
+    
+    console.log(`📅 Rango: ${startDateStr} → ${endDateStr}`);
+    
+    // Leer reuniones desde caché
+    const meetings = await readFromCacheCalendar(startDateStr, endDateStr);
+    console.log(`📧 Total reuniones en caché: ${meetings.length}`);
+    
+    if (meetings.length === 0) {
+      console.log('⚠️ No hay reuniones en caché para sincronizar');
+      return { success: true, syncedCount: 0, skippedCount: 0 };
+    }
+    
+    // Obtener todos los contactos de la BD
+    const contactsResponse = await fetch('http://localhost:3001/api/contacts');
+    const contacts = await contactsResponse.json();
+    console.log(`👥 Contactos en BD: ${contacts.length}`);
+    
+    let syncedCount = 0;
+    let skippedCount = 0;
+    let errorCount = 0;
+    
+    // Tipos de reunión permitidos
+    const allowedTypes = ['SKO', 'QBR 90', 'QBR MIDYEAR', 'QBR AA90', 'Qualification', 'Cap. Alignment', 'IPW', 'POC', 'EP POC', 'Proposal', 'Delivery', 'Otros'];
+    
+    for (const meeting of meetings) {
+      try {
+        // Buscar contacto(s) que estén en esta reunión
+        const matchedContacts = contacts.filter(contact =>
+          isContactInMeeting(meeting, contact.email, contact.first_name, contact.last_name)
+        );
+        
+        if (matchedContacts.length === 0) {
+          skippedCount++;
+          continue;
+        }
+        
+        // Para cada contacto encontrado, crear/actualizar meeting
+        for (const contact of matchedContacts) {
+          try {
+            const meetingDate = meeting.Start.split(' ')[0];
+            const meetingTime = meeting.Start.split(' ')[1] || '00:00:00';
+            
+            // Determinar tipo de reunión
+            let meetingType = 'Otros';
+            const normalizedSubject = meeting.Subject.trim().toLowerCase();
+            for (const type of allowedTypes) {
+              if (normalizedSubject.includes(type.toLowerCase())) {
+                meetingType = type;
+                break;
+              }
+            }
+            
+            // Verificar si ya existe
+            const existingResponse = await fetch(`http://localhost:3001/api/meetings/contact/${contact.id}`);
+            const existingMeetings = await existingResponse.json();
+            
+            const isDuplicate = existingMeetings.some(existingMeeting => {
+              let existingDate = existingMeeting.meeting_date;
+              
+              if (existingDate.includes('/')) {
+                const parts = existingDate.split('/');
+                const day = parts[0].padStart(2, '0');
+                const month = parts[1].padStart(2, '0');
+                const year = parts[2].split(' ')[0];
+                existingDate = `${year}-${month}-${day}`;
+              } else if (existingDate.includes(' ')) {
+                existingDate = existingDate.split(' ')[0];
+              }
+              
+              if (existingDate !== meetingDate) return false;
+              
+              const existingSubject = (existingMeeting.notes || '').toLowerCase();
+              return existingSubject.includes(normalizedSubject) || normalizedSubject.includes(existingSubject);
+            });
+            
+            if (isDuplicate) {
+              skippedCount++;
+              continue;
+            }
+            
+            // Preparar notas
+            const notes = `${meeting.Subject}
+
+Fecha: ${meeting.Start}
+Duración: ${meeting.Duration} minutos
+Ubicación: ${meeting.Location || 'No especificada'}
+Organizador: ${meeting.OrganizerName || 'Desconocido'}
+
+${meeting.Body ? meeting.Body : ''}`.trim();
+            
+            // Crear meeting
+            const meetingData = {
+              contact_id: contact.id,
+              opportunity_id: null,
+              meeting_type: meetingType,
+              meeting_date: `${meetingDate} ${meetingTime}`,
+              feeling: '',
+              notes: notes
+            };
+            
+            const response = await fetch('http://localhost:3001/api/meetings', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(meetingData)
+            });
+            
+            if (response.ok) {
+              syncedCount++;
+            } else {
+              errorCount++;
+            }
+          } catch (contactError) {
+            console.error(`⚠️ Error procesando reunión para ${contact.email}:`, contactError.message);
+            errorCount++;
+          }
+        }
+      } catch (meetingError) {
+        console.error(`⚠️ Error procesando reunión "${meeting.Subject}":`, meetingError.message);
+        errorCount++;
+      }
+    }
+    
+    console.log(`\n📊 === RESUMEN DE SINCRONIZACIÓN ===`);
+    console.log(`   ✅ Sincronizadas: ${syncedCount}`);
+    console.log(`   ⏭️  Omitidas: ${skippedCount}`);
+    console.log(`   ❌ Errores: ${errorCount}`);
+    console.log(`=====================================\n`);
+    
+    return {
+      success: true,
+      syncedCount,
+      skippedCount,
+      errorCount
+    };
+  } catch (error) {
+    console.error('❌ Error sincronizando reuniones con BD:', error);
+    throw error;
+  }
+};
+
+/**
+ * POST /api/calendar/create-cache
+ * Crea un nuevo archivo de caché incremental de calendario
+ */
+app.post('/api/calendar/create-cache', async (req, res) => {
+  try {
+    const result = await createIncrementalCacheCalendar();
+    res.json(result);
+  } catch (error) {
+    console.error('Error creando caché de calendario:', error);
+    res.status(500).json({ 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    });
+  }
+});
+
+/**
+ * GET /api/calendar/cache-info
+ * Información sobre los archivos de caché de calendario
+ */
+app.get('/api/calendar/cache-info', async (req, res) => {
+  try {
+    const cacheFiles = await getCacheFilesCalendar();
+    const lastCacheDate = await getLastCacheDateCalendar();
+    
+    const totalMeetings = await Promise.all(
+      cacheFiles.map(async (file) => {
+        const data = await fs.readFile(file.path, 'utf8');
+        const meetings = JSON.parse(data);
+        return meetings.length;
+      })
+    );
+    
+    const sum = totalMeetings.reduce((a, b) => a + b, 0);
+    
+    res.json({
+      success: true,
+      cacheFiles: cacheFiles.map((f, i) => ({
+        filename: f.filename,
+        startDate: f.startDate,
+        endDate: f.endDate,
+        meetingCount: totalMeetings[i]
+      })),
+      totalCacheFiles: cacheFiles.length,
+      totalMeetingsCached: sum,
+      lastCacheDate
+    });
+  } catch (error) {
+    console.error('Error obteniendo info de caché de calendario:', error);
+    res.status(500).json({ 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    });
+  }
+});
+
+/**
+ * POST /api/calendar/sync-all-meetings
+ * Sincroniza todas las reuniones de la caché con la base de datos
+ */
+app.post('/api/calendar/sync-all-meetings', async (req, res) => {
+  try {
+    const result = await syncAllMeetingsToDatabase();
+    res.json(result);
+  } catch (error) {
+    console.error('Error sincronizando reuniones:', error);
+    res.status(500).json({ 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    });
+  }
+});
+
+app.listen(PORT, async () => {
+  console.log(`\n✅ Servidor de email ejecutándose en http://localhost:${PORT}`);
+  console.log('\nEndpoints disponibles:');
+  console.log('  POST /api/draft-email - Crear un borrador');
+  console.log('  POST /api/draft-emails-batch - Crear múltiples borradores');
+  console.log('  GET /api/health - Health check');
+  console.log('  POST /api/campaigns/check-all-replies - Revisar respuestas');
+  console.log('  GET /api/outlook/calendar - Leer calendario');
+  console.log('  POST /api/contacts/import-calendar-meetings - Importar reuniones de un contacto');
+  console.log('  POST /api/calendar/sync-all-meetings - Sincronizar reuniones con BD\n');
+
+  // ⭐ INICIALIZAR CACHÉ DE EMAILS EN BACKGROUND
+  await initializeCacheOnStartup();
+  
+  // ⭐ INICIALIZAR CACHÉ DE CALENDARIO EN BACKGROUND
+  await initializeCalendarCacheOnStartup();
+});

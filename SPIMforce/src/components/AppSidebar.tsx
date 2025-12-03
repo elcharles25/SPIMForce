@@ -32,9 +32,9 @@ export function AppSidebar() {
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupLabel>
-            <div className="mt-6 h-10 w-10 flex items-center gap-2">
+            <div className="mt-6 h-14 w-14 flex items-center gap-2">
               <img
-                src="/favicon.png"
+                src="/favicon_shell.png"
                 className={open ? "text-xl" : ""}></img>
                 {open && <span className="text-4xl font-charles">SPIMForce</span>}
             </div>
