@@ -1,5 +1,5 @@
   import { useState, useEffect } from 'react';
-  import { useNavigate, useParams } from 'react-router-dom';
+  import { useNavigate, useParams, useLocation } from 'react-router-dom';
   import { db } from '@/lib/db-adapter';
   import { Button } from '@/components/ui/button';
   import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -377,6 +377,10 @@
       solution_mode: '',
       offer_presented: false,
     });
+
+    const location = useLocation();
+    const fromContact = location.state?.from === 'contact';
+    const contactIdFromState = location.state?.contactId;
 
     const generateNotesFile = (meetings: Meeting[]): string => {
       let content = '=== HISTORIAL COMPLETO DE INTERACCIONES ===\n\n';
@@ -813,6 +817,20 @@
 
       try {
         await db.updateOpportunity(id!, payload);
+        // Actualizar tipo de contacto según el estado
+          if (opportunityForm.status === 'Cerrada perdida') {
+            const contact = await db.getContact(opportunityForm.contact_id);
+            await db.updateContact(opportunityForm.contact_id, {
+              ...contact,
+              contact_type: 'Prospect'
+            });
+          } else if (opportunityForm.status === 'Cerrada ganada') {
+            const contact = await db.getContact(opportunityForm.contact_id);
+            await db.updateContact(opportunityForm.contact_id, {
+              ...contact,
+              contact_type: 'Cliente'
+            });
+          }
         toast({
           title: 'Éxito',
           description: 'Oportunidad actualizada correctamente',
@@ -1048,20 +1066,17 @@
     }
 
     const hasPriorities = (qualificationPriorities?.length ?? 0) > 0;
-
-    //const foundGartnerValue = initiative.initiative_gartner_value ?? '';
-    //const isNoIdentificado = /^\s*no identificad[oa]\.?\s*$/i.test(foundGartnerValue);
-
-
     return (
       <div className="container mx-auto py-6 px-4">
         <Button
           variant="ghost"
-          onClick={() => navigate('/opportunities')}
+          onClick={() => navigate(
+            fromContact ? `/contacts/${contactIdFromState}` : '/opportunities'
+          )}
           className="mb-4"
         >
           <ArrowLeft className="mr-2 h-4 w-4" />
-          Volver a Oportunidades
+          {fromContact ? 'Volver a Contacto' : 'Volver a Oportunidades'}
         </Button>
         {/* HEADER CON FOTO Y DATOS DEL CONTACTO */}
         <div className="flex gap-6 mb-1">
@@ -1167,7 +1182,9 @@
                 <CardTitle className="text-lg font-semibold text-slate-800">Información de Contacto</CardTitle>
                 <Badge
                   className="text-xs text-slate-500 px-3 py-1 rounded-full font-medium shadow-sm border-slate-400 bg-slate-50 hover:bg-slate-300 hover:text-slate-600 hover:border-slate-600 cursor-pointer"  
-                  onClick={() => {navigate(`/contacts/${opportunity.contact_id}`);
+                  onClick={() => {navigate(`/contacts/${opportunity.contact_id}`, {
+                    state: { from: 'opportunity', opportunityId: opportunity.id }
+                  });
                   }}
                 >
                   Ver Contacto

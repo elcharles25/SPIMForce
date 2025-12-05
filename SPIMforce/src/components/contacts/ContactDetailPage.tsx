@@ -303,6 +303,7 @@ const [formData, setFormData] = useState({
     const location = useLocation();
     const fromAccount = location.state?.from === 'account';
     const fromDashboard = location.state?.from === 'dashboard';
+    const fromOpportunity = location.state?.from === 'opportunity';
     const accountId = location.state?.accountId;
     const [valueAnalysisDialog, setValueAnalysisDialog] = useState(false);
     const [selectedValueInitiative, setSelectedValueInitiative] = useState<any>(null);
@@ -1115,14 +1116,16 @@ const handleShowMore = () => {
         variant="ghost"
         onClick={() => navigate(
           fromAccount ? `/accounts/${accountId}` : 
-          fromDashboard ? '/' : 
+          fromDashboard ? '/' :
+          fromOpportunity ? `/opportunities/${location.state?.opportunityId}` :
           '/crm'
         )}
         className="mb-4"
       >
         <ArrowLeft className="mr-2 h-4 w-4" />
         {fromAccount ? 'Volver a la cuenta' : 
-        fromDashboard ? 'Volver a Dashboard' : 
+        fromDashboard ? 'Volver a Dashboard' :
+        fromOpportunity ? 'Volver a Oportunidad' :
         'Volver a Contactos'}
       </Button>
 
@@ -1237,7 +1240,9 @@ const handleShowMore = () => {
                 }`}
                 onClick={() => {
                   if (contact.contact_type === "Oportunidad" && opportunities.length > 0) {
-                    navigate(`/opportunities/${opportunities[0].id}`);
+                    navigate(`/opportunities/${opportunities[0].id}`, {
+                      state: { from: 'contact', contactId: id }
+                    });
                   }
                 }}
               >
