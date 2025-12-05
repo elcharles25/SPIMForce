@@ -1192,7 +1192,7 @@ const handleShowMore = () => {
               </h1>
               {contact.tier && (
                 <span 
-                  className={`w-20 h-10 rounded-full flex items-center text-white justify-center text-lg font-bold shadow-md ${
+                  className={`w-20 h-10 rounded-full flex items-center text-white justify-center text-lg font-bold ${
                       contact.tier === "1" ? "tier-1" :
                       contact.tier === "2" ? "tier-2" :
                       "tier-3"
@@ -1228,12 +1228,12 @@ const handleShowMore = () => {
               <Badge
                 className={`px-3 py-1 font-medium ${
                   contact.contact_type === "Cliente" || contact.contact_type === "Cliente proxy"
-                    ? "text-lg bg-white hover:bg-white text-green-600"
+                    ? "rounded-sm text-xs text-green-600 bg-green-500/20 text-green-700 hover:bg-green-500/20"
                     : contact.contact_type === "Oportunidad"
                     ? "text-xs bg-indigo-50 border-indigo-300 text-indigo-400 cursor-pointer hover:bg-indigo-200 hover:border-indigo-500 hover:text-indigo-600"
                     : contact.contact_type === "Prospect"
-                    ? "text-lg bg-white hover:bg-white text-amber-600"
-                    : "bg-slate-500 hover:bg-slate-500"
+                    ? "rounded-sm text-xs text-amber-600 bg-amber-500/20 text-amber-700 hover:bg-amber-500/20"
+                    : "rounded-sm text-xs text-slate-600 bg-slate-500/20 text-slate-700 hover:bg-slate-500/20"
                 }`}
                 onClick={() => {
                   if (contact.contact_type === "Oportunidad" && opportunities.length > 0) {

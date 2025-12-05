@@ -144,12 +144,12 @@
   ];
 
   const STATUS_COLORS: Record<string, string> = {
-    'Abierta': 'bg-gray-100 border-gray-500 text-gray-700',
-    'Qualification': 'bg-blue-50 border-blue-500 text-blue-700',
-    'Capabilities': 'bg-indigo-100 border-indigo-500 text-indigo-700',
-    'Propuesta': 'bg-green-100 border-green-500 text-green-700',
-    'Cerrada ganada': 'bg-green-500',
-    'Cerrada perdida': 'bg-black',
+    'Abierta': 'bg-gray-100 border-gray-500 text-gray-700 hover:bg-gray-100',
+    'Qualification': 'bg-blue-50 border-blue-500 text-blue-700 hover:bg-blue-50',
+    'Capabilities': 'bg-indigo-100 border-indigo-500 text-indigo-700 hover:bg-indigo-100',
+    'Propuesta': 'bg-green-100 border-green-500 text-green-700 hover:bg-green-100',
+    'Cerrada ganada': 'bg-green-500 hover:bg-green-500',
+    'Cerrada perdida': 'bg-black hover:bg-black',
   };
 
   const STATUS_LABELS: Record<string, string> = {
@@ -1371,7 +1371,10 @@
               </div>
               <div>
                 <span className="font-medium">Oferta Presentada:</span>{' '}
-                <Badge variant={opportunity.offer_presented ? 'default' : 'secondary'}>
+                <Badge 
+                    variant={'secondary'}
+                    className="text-slate-600"
+                    >
                   {opportunity.offer_presented ? 'Sí' : 'No'}
                 </Badge>
               </div>
