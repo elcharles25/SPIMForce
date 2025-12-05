@@ -1329,9 +1329,8 @@ const fetchCampaigns = async () => {
           <col className="w-[160px]" />
           <col className="w-[100px]" />
           <col className="w-[100px]" />
-          <col className="w-[120px]" />
-          <col className="w-[200px]" />
-          <col className="w-[120px]" />
+          <col className="w-[100px]" />
+          <col className="w-[240px]" />
         </colgroup>
         {showHeader && (
           <TableHeader>
@@ -1342,7 +1341,6 @@ const fetchCampaigns = async () => {
               <TableHead className="text-center">Rol Campaña</TableHead>
               <TableHead className="text-center">Estado</TableHead>
               <TableHead className="text-center">Progreso</TableHead>
-              <TableHead className="text-center">Acciones</TableHead>
             </TableRow>
           </TableHeader>
         )}
@@ -1439,7 +1437,7 @@ const fetchCampaigns = async () => {
                     })()}
                   </TableCell>
                   
-                  <TableCell className="p-2">
+                  <TableCell className="p-4">
                     <div className="flex flex-col items-center gap-2">
                       <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
                         <div 
@@ -1485,57 +1483,6 @@ const fetchCampaigns = async () => {
                           </span>
                         )}
                       </div>
-                    </div>
-                  </TableCell>
-                  
-                  <TableCell>
-                    <div className="flex justify-center gap-3">
-                      {campaign.email_incorrect ? (
-                        <Button 
-                          size="sm" 
-                          variant="destructive" 
-                          onClick={() => {
-                            if (window.confirm(`¿Estás seguro de eliminar esta campaña?\n\nContacto: ${campaign.contacts.first_name} ${campaign.contacts.last_name}\nEmail incorrecto: ${campaign.contacts.email}`)) {
-                              handleDelete(campaign.id);
-                            }
-                          }}
-                          title="Eliminar campaña con email incorrecto"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      ) : (
-                        <>
-                          <Button 
-                            size="sm" 
-                            variant="outline" 
-                            onClick={() => sendTodayEmails(campaign)}
-                            disabled={campaign.has_replied || campaign.emails_sent >= 5}
-                            title={
-                              campaign.has_replied 
-                                ? "Campaña respondida - no se pueden enviar más emails" 
-                                : campaign.emails_sent >= 5 
-                                ? "Campaña completada - todos los emails fueron enviados"
-                                : "Enviar emails pendientes de hoy"
-                            }
-                          >
-                            <Send className="h-3 w-3" />
-                          </Button>
-                                           
-                          {campaign.start_campaign && 
-                          !campaign.has_replied && 
-                          campaign.emails_sent < 5 && 
-                          getNextEmailNumber(campaign) && (
-                            <Button 
-                              size="sm" 
-                              variant="outline" 
-                              onClick={() => sendEmail(campaign, getNextEmailNumber(campaign)!)}
-                              title={`Enviar email ${getNextEmailNumber(campaign)} manualmente`}
-                            >
-                              <Send className="h-3 w-3" />
-                            </Button>
-                          )}
-                        </>
-                      )}
                     </div>
                   </TableCell>
                 </TableRow>

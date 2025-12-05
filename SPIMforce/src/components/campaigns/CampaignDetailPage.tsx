@@ -66,6 +66,7 @@ export default function CampaignDetailPage() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [templates, setTemplates] = useState<any[]>([]);
   const [filteredTemplates, setFilteredTemplates] = useState<any[]>([]);
+  const [isSendingEmails, setIsSendingEmails] = useState(false);
   const [formData, setFormData] = useState({
     template_id: "",
     start_campaign: false,
@@ -215,6 +216,75 @@ export default function CampaignDetailPage() {
     }
     return 'Volver a Campañas';
   };
+
+const handleSendPendingEmails = async () => {
+  if (!campaign) return;
+
+  try {
+    setIsSendingEmails(true);
+    
+    const today = new Date();
+    const localDate = today.toLocaleDateString('en-CA');
+    let emailsSent = 0;
+
+    console.log('=== DEBUG sendTodayEmails ===');
+    console.log('Campaign:', campaign.id);
+    console.log('Start campaign:', campaign.start_campaign);
+    console.log('Emails sent:', campaign.emails_sent);
+    console.log('Today:', localDate);
+
+    for (let i = 1; i <= 5; i++) {
+      const dateField = `email_${i}_date` as keyof Campaign;
+      const emailDate = campaign[dateField];
+      const emailDateOnly = emailDate ? String(emailDate).split('T')[0] : null;
+      console.log(`Email ${i}: date=${emailDateOnly}, sent=${campaign.emails_sent >= i}, shouldSend=${emailDateOnly && emailDateOnly <= localDate && campaign.emails_sent < i}`);
+
+      if (emailDateOnly && emailDateOnly <= localDate && campaign.emails_sent < i) {
+        console.log(`✓ Enviando email ${i}`);
+        
+        const response = await fetch('http://localhost:3001/api/campaigns/send-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            campaignId: campaign.id, 
+            emailNumber: i 
+          })
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Error al enviar email');
+        }
+
+        emailsSent++;
+        break;
+      }
+    }
+
+    if (emailsSent === 0) {
+      toast({
+        title: "Sin emails pendientes",
+        description: "No hay emails programados para hoy",
+      });
+    } else {
+      toast({
+        title: "Email enviado",
+        description: `Se envió ${emailsSent} email a la cola de envío`,
+      });
+      await loadData();
+    }
+
+  } catch (error: any) {
+    console.error('Error enviando emails:', error);
+    toast({
+      title: "Error",
+      description: error.message || "No se pudo enviar el email",
+      variant: "destructive",
+    });
+  } finally {
+    setIsSendingEmails(false);
+  }
+};
 
   const getCampaignStatus = () => {
     if (!campaign) return { status: "Desconocido", variant: "outline" as const };
@@ -384,18 +454,28 @@ export default function CampaignDetailPage() {
                   {campaign.contacts.title} - {campaign.contacts.organization}
                 </p>
               </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  className='rounded-full'
-                  size="sm"
-                  onClick={handleEdit}
-                  disabled={campaign.has_replied || campaign.emails_sent >= 5 || campaign.email_incorrect}
-                >
-                  <Pencil className="h-4 w-4 mr-2" />
-                  Editar
-                </Button>
-              </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className='rounded-full'
+                size="sm"
+                onClick={handleSendPendingEmails}
+                disabled={isSendingEmails || campaign.has_replied || campaign.emails_sent >= 5 || campaign.email_incorrect || !campaign.start_campaign}
+              >
+                <Send className="h-4 w-4 mr-2" />
+                {isSendingEmails ? 'Enviando...' : 'Enviar Pendientes Hoy'}
+              </Button>
+              <Button
+                variant="outline"
+                className='rounded-full'
+                size="sm"
+                onClick={handleEdit}
+                disabled={campaign.has_replied || campaign.emails_sent >= 5 || campaign.email_incorrect}
+              >
+                <Pencil className="h-4 w-4 mr-2" />
+                Editar
+              </Button>
+            </div>
             </div>
         {/* Estado de la campaña */}
         
@@ -448,11 +528,13 @@ export default function CampaignDetailPage() {
           <CardHeader>
             <CardTitle className="flex justify-between items-center">Información del Contacto
                 <Button
-                variant="link"
-                className="p-3 h-auto"
-                onClick={() => navigate(`/crm/${campaign.contact_id}`)}>
-                Ver perfil del contacto →
-              </Button>
+                  variant="link"
+                  className="p-3 h-auto"
+                  onClick={() => navigate(`/crm/${campaign.contact_id}`, { 
+                    state: { from: 'campaign', campaignId: campaign.id } 
+                  })}>
+                  Ver perfil del contacto →
+                </Button>
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">

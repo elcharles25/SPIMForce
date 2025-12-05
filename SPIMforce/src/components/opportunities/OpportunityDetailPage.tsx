@@ -1076,7 +1076,7 @@
           className="mb-4"
         >
           <ArrowLeft className="mr-2 h-4 w-4" />
-          {fromContact ? 'Volver a Contacto' : 'Volver a Oportunidades'}
+          {fromContact ? 'Volver al Contacto' : 'Volver a Oportunidades'}
         </Button>
         {/* HEADER CON FOTO Y DATOS DEL CONTACTO */}
         <div className="flex gap-6 mb-1">

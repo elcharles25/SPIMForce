@@ -305,6 +305,8 @@ const [formData, setFormData] = useState({
     const fromDashboard = location.state?.from === 'dashboard';
     const fromOpportunity = location.state?.from === 'opportunity';
     const accountId = location.state?.accountId;
+    const fromCampaign = location.state?.from === 'campaign';
+    const campaignId = location.state?.campaignId;
     const [valueAnalysisDialog, setValueAnalysisDialog] = useState(false);
     const [selectedValueInitiative, setSelectedValueInitiative] = useState<any>(null);
     const [valueInitiativeDetailDialog, setValueInitiativeDetailDialog] = useState(false);
@@ -1115,6 +1117,7 @@ const handleShowMore = () => {
       <Button
         variant="ghost"
         onClick={() => navigate(
+          fromCampaign ? `/campaigns/${campaignId}` :
           fromAccount ? `/accounts/${accountId}` : 
           fromDashboard ? '/' :
           fromOpportunity ? `/opportunities/${location.state?.opportunityId}` :
@@ -1123,9 +1126,10 @@ const handleShowMore = () => {
         className="mb-4"
       >
         <ArrowLeft className="mr-2 h-4 w-4" />
-        {fromAccount ? 'Volver a la cuenta' : 
-        fromDashboard ? 'Volver a Dashboard' :
-        fromOpportunity ? 'Volver a Oportunidad' :
+        {fromCampaign ? 'Volver a la Campaña' :
+        fromAccount ? 'Volver a la Cuenta' : 
+        fromDashboard ? 'Volver al Dashboard' :
+        fromOpportunity ? 'Volver a la Oportunidad' :
         'Volver a Contactos'}
       </Button>
 
