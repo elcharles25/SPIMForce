@@ -5,7 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Edit, Trash2, Paperclip, Download, Upload } from "lucide-react";
+import { Plus, Edit, Paperclip, Download, Upload, Loader2  } from "lucide-react";
 import { TemplateEditor } from "./TemplateEditor";
 import { formatDateES } from "@/utils/dateFormatter";
 
@@ -152,158 +152,166 @@ const handleImportClick = () => {
   setShowImportDialog(true);
 };
 
-const handleFileSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
-  const file = event.target.files?.[0];
-  if (file) {
-    setShowImportDialog(false);
-    importTemplateFromXML(file);
+const handleFileSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const files = event.target.files;
+  if (!files || files.length === 0) return;
+  
+  setShowImportDialog(false);
+  setImportingTemplate(true);
+
+  const filesArray = Array.from(files);
+  let successCount = 0;
+  let errorCount = 0;
+
+  for (const file of filesArray) {
+    try {
+      await importTemplateFromXML(file);
+      successCount++;
+    } catch (error) {
+      console.error(`Error importando ${file.name}:`, error);
+      errorCount++;
+    }
   }
+
+  setImportingTemplate(false);
+
+  if (successCount > 0) {
+    toast({
+      title: "Importación completada",
+      description: `${successCount} plantilla(s) importada(s) correctamente${errorCount > 0 ? `. ${errorCount} fallaron.` : ''}`,
+      duration: 5000,
+    });
+  } else {
+    toast({
+      title: "Error",
+      description: "No se pudo importar ninguna plantilla",
+      variant: "destructive"
+    });
+  }
+
   event.target.value = "";
+  fetchTemplates();
 };
 
 const importTemplateFromXML = async (file: File) => {
-  setImportingTemplate(true);
+  let xmlText = "";
+  let attachmentsInZip: { [key: string]: Blob } = {};
+
+  // Verificar si es ZIP
+  if (!file.name.endsWith('.zip')) {
+    throw new Error(`${file.name}: Solo se permiten archivos ZIP`);
+  }
+
+  const JSZip = (await import('jszip')).default;
+  const zip = await JSZip.loadAsync(file);
   
-  try {
-    let xmlText = "";
-    let attachmentsInZip: { [key: string]: Blob } = {};
+  // Buscar el archivo XML
+  const xmlFile = Object.keys(zip.files).find(name => name.endsWith('.xml'));
+  if (!xmlFile) {
+    throw new Error(`${file.name}: No se encontró archivo XML en el ZIP`);
+  }
+  
+  xmlText = await zip.files[xmlFile].async('text');
+  
+  // Extraer adjuntos del ZIP
+  const attachmentFiles = Object.keys(zip.files).filter(name => 
+    name.startsWith('attachments/') && !zip.files[name].dir
+  );
+  
+  for (const filename of attachmentFiles) {
+    const blob = await zip.files[filename].async('blob');
+    attachmentsInZip[filename.replace('attachments/', '')] = blob;
+  }
 
-    // Verificar si es ZIP
-    if (file.name.endsWith('.zip')) {
-      const JSZip = (await import('jszip')).default;
-      const zip = await JSZip.loadAsync(file);
-      
-      // Buscar el archivo XML
-      const xmlFile = Object.keys(zip.files).find(name => name.endsWith('.xml'));
-      if (!xmlFile) {
-        throw new Error("No se encontró archivo XML en el ZIP");
-      }
-      
-      xmlText = await zip.files[xmlFile].async('text');
-      
-      // Extraer adjuntos del ZIP
-      const attachmentFiles = Object.keys(zip.files).filter(name => 
-        name.startsWith('attachments/') && !zip.files[name].dir
-      );
-      
-      for (const filename of attachmentFiles) {
-        const blob = await zip.files[filename].async('blob');
-        attachmentsInZip[filename.replace('attachments/', '')] = blob;
-      }
-    } else {
-      throw new Error("Solo se permiten archivos ZIP");
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+
+  const parserError = xmlDoc.querySelector("parsererror");
+  if (parserError) {
+    throw new Error(`${file.name}: El archivo XML no es válido`);
+  }
+
+  let name = xmlDoc.querySelector("metadata > name")?.textContent || "";
+  const gartner_role = xmlDoc.querySelector("metadata > gartner_role")?.textContent || "";
+
+  // Verificar duplicados
+  const existingTemplates = await db.getTemplates();
+  const duplicates = existingTemplates.filter(
+    (t: any) =>
+      t.gartner_role === gartner_role &&
+      t.name.toLowerCase().startsWith(name.toLowerCase())
+  );
+
+  if (duplicates.length > 0) {
+    const existingNames = duplicates.map((t: any) => t.name);
+    let counter = 1;
+    let newName = `${name} (${counter})`;
+
+    while (existingNames.includes(newName)) {
+      counter++;
+      newName = `${name} (${counter})`;
     }
 
-    const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+    name = newName;
+  }
 
-    const parserError = xmlDoc.querySelector("parsererror");
-    if (parserError) {
-      throw new Error("El archivo XML no es válido");
-    }
+  const templateData: any = {
+    name,
+    gartner_role,
+  };
 
-    let name = xmlDoc.querySelector("metadata > name")?.textContent || "";
-    const gartner_role = xmlDoc.querySelector("metadata > gartner_role")?.textContent || "";
+  // Extraer emails y procesar adjuntos
+  for (let i = 1; i <= 5; i++) {
+    const emailNode = xmlDoc.querySelector(`email_${i}`);
+    if (emailNode) {
+      templateData[`email_${i}_subject`] = emailNode.querySelector("subject")?.textContent || "";
+      templateData[`email_${i}_html`] = emailNode.querySelector("html")?.textContent || "";
 
-    // Verificar duplicados
-    const existingTemplates = await db.getTemplates();
-    const duplicates = existingTemplates.filter(
-      (t: any) =>
-        t.gartner_role === gartner_role &&
-        t.name.toLowerCase().startsWith(name.toLowerCase())
-    );
-
-    if (duplicates.length > 0) {
-      const existingNames = duplicates.map((t: any) => t.name);
-      let counter = 1;
-      let newName = `${name} (${counter})`;
-
-      while (existingNames.includes(newName)) {
-        counter++;
-        newName = `${name} (${counter})`;
-      }
-
-      name = newName;
-
-      toast({
-        title: "Nombre modificado",
-        description: `Ya existía una plantilla con ese nombre. Se importará como "${name}"`,
-        duration: 5000,
-      });
-    }
-
-    const templateData: any = {
-      name,
-      gartner_role,
-    };
-
-    // Extraer emails y procesar adjuntos
-    for (let i = 1; i <= 5; i++) {
-      const emailNode = xmlDoc.querySelector(`email_${i}`);
-      if (emailNode) {
-        templateData[`email_${i}_subject`] = emailNode.querySelector("subject")?.textContent || "";
-        templateData[`email_${i}_html`] = emailNode.querySelector("html")?.textContent || "";
-
-        const attachmentsText = emailNode.querySelector("attachments")?.textContent || "[]";
-        try {
-          const attachmentsData = JSON.parse(attachmentsText);
+      const attachmentsText = emailNode.querySelector("attachments")?.textContent || "[]";
+      try {
+        const attachmentsData = JSON.parse(attachmentsText);
+        
+        if (attachmentsData.length > 0) {
+          const processedAttachments = [];
           
-          if (attachmentsData.length > 0) {
-            const processedAttachments = [];
+          for (const attachment of attachmentsData) {
+            const filename = attachment.filename || attachment.name;
             
-            for (const attachment of attachmentsData) {
-              const filename = attachment.filename || attachment.name;
+            // Si el adjunto está en el ZIP, subirlo
+            if (attachmentsInZip[filename]) {
+              const formData = new FormData();
+              formData.append('file', attachmentsInZip[filename], filename);
               
-              // Si el adjunto está en el ZIP, subirlo
-              if (attachmentsInZip[filename]) {
-                const formData = new FormData();
-                formData.append('file', attachmentsInZip[filename], filename);
-                
-                const response = await fetch('http://localhost:3001/api/upload-attachment', {
-                  method: 'POST',
-                  body: formData
+              const response = await fetch('http://localhost:3001/api/upload-attachment', {
+                method: 'POST',
+                body: formData
+              });
+              
+              if (response.ok) {
+                const result = await response.json();
+                processedAttachments.push({
+                  name: result.name,
+                  url: `http://localhost:3001${result.url}`,
+                  filename: result.filename,
+                  size: result.size
                 });
-                
-                if (response.ok) {
-                  const result = await response.json();
-                  processedAttachments.push({
-                    name: result.name,
-                    url: `http://localhost:3001${result.url}`,
-                    filename: result.filename,
-                    size: result.size
-                  });
-                }
-              } else {
-                console.warn(`Adjunto no encontrado en ZIP: ${filename}`);
               }
+            } else {
+              console.warn(`Adjunto no encontrado en ZIP: ${filename}`);
             }
-            
-            templateData[`email_${i}_attachments`] = processedAttachments;
-          } else {
-            templateData[`email_${i}_attachments`] = [];
           }
-        } catch {
+          
+          templateData[`email_${i}_attachments`] = processedAttachments;
+        } else {
           templateData[`email_${i}_attachments`] = [];
         }
+      } catch {
+        templateData[`email_${i}_attachments`] = [];
       }
     }
-
-    await db.createTemplate(templateData);
-
-    toast({ title: "Éxito", description: "Plantilla importada correctamente" });
-    fetchTemplates();
-  } catch (error) {
-    console.error("Error importando plantilla:", error);
-    toast({
-      title: "Error",
-      description: `No se pudo importar la plantilla: ${
-        error instanceof Error ? error.message : "Error desconocido"
-      }`,
-      variant: "destructive",
-    });
-  } finally {
-    setImportingTemplate(false);
   }
+
+  await db.createTemplate(templateData);
 };
 
 // Función auxiliar para escapar caracteres especiales en XML
@@ -334,7 +342,7 @@ const escapeXML = (str: string) => {
           className="rounded-full shadow-sm hover:shadow-md transition-shadow hover:bg-indigo-100"
           onClick={handleImportClick}>
           <Upload className="h-4 w-4 mr-2" />
-          Importar plantilla
+          Importar plantillas
         </Button>
 
       </div>
@@ -413,18 +421,25 @@ const escapeXML = (str: string) => {
       <DialogHeader>
         <DialogTitle>Importar Plantilla de Campaña</DialogTitle>
       </DialogHeader>
-      <div className="space-y-4 py-4">
-        <p className="text-sm text-muted-foreground">
-          Selecciona el archivo ZIP que contiene la plantilla de campaña que deseas importar.
-        </p>
-        <Input
-          type="file"
-          accept=".zip"
-          onChange={handleFileSelected}
-          disabled={importingTemplate}
-          className="cursor-pointer"
-        />
-      </div>
+        <div className="space-y-4 py-4">
+          <p className="text-sm text-muted-foreground">
+            Selecciona los archivos ZIP que contengan las plantillas de campañas que deseas importar
+          </p>
+          <Input
+            type="file"
+            accept=".zip"
+            multiple
+            onChange={handleFileSelected}
+            disabled={importingTemplate}
+            className="cursor-pointer"
+          />
+          {importingTemplate && (
+            <p className="text-sm text-muted-foreground flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Importando plantillas...
+            </p>
+          )}
+        </div>
       <DialogFooter>
         <Button
           variant="outline"
